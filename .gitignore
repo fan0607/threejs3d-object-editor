@@ -1,3 +1,2 @@
 #忽略本仓库所有node_modules文件夹下的文件
 node_modules/
-*.scss
