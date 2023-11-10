@@ -11,14 +11,14 @@ import * as YUKA from 'yuka'
 const threeContainer = ref(null)
 onMounted(() => {
     const scene = new THREE.Scene()
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000)
+    const camera = new THREE.PerspectiveCamera(75, threeContainer.value.clientWidth / threeContainer.value.clientHeight, 0.1, 1000)
     camera.position.set(5, 10, 10)
     camera.lookAt(0, 0, 0)
     const renderer = new THREE.WebGLRenderer({
         antialias: true,
         // alpha: true
     })
-    renderer.setSize(window.innerWidth, window.innerHeight)
+    renderer.setSize(threeContainer.value.clientWidth, threeContainer.value.clientHeight)
     renderer.shadowMap.enabled = true
     threeContainer.value.appendChild(renderer.domElement)
     const groundGeometry = new THREE.PlaneGeometry(100, 100)
@@ -50,6 +50,7 @@ onMounted(() => {
         color: 0x00ff00
     })
     const coneMesh = new THREE.Mesh(coneGeometry, coneMaterial)
+    coneMesh.castShadow = true
     //改变几何体顶点和默认方向时，geometry可以不用更新，但是mesh的matrix需要更新
     // coneGeometry.rotateX(Math.PI / 2)
     // coneMesh.quaternion.copy(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2))
@@ -74,14 +75,40 @@ onMounted(() => {
     path.add(new YUKA.Vector3(10, 0, 10))
     path.add(new YUKA.Vector3(10, 0, 0))
     path.add(new YUKA.Vector3(0, 0, 0))
-    path.loop = true
+    // path.loop = true
     vehicle.position.copy(path.current())
-
+    vehicle.smoother = new YUKA.Smoother( 20 );
     const followPathBehavior = new YUKA.FollowPathBehavior(path)
-    vehicle.steering.add(followPathBehavior)
-
+    // vehicle.steering.add(followPathBehavior)
+    const keepOnPathBehavior = new YUKA.OnPathBehavior(path)
+    keepOnPathBehavior.weight = 10
+    // vehicle.steering.add(keepOnPathBehavior)
+    const arriveBehavior = new YUKA.ArriveBehavior(new YUKA.Vector3(0, 0, 0), 1, 0.01)
+    arriveBehavior.weight = 10
+    vehicle.steering.add(arriveBehavior)
     const entityManger = new YUKA.EntityManager()
     entityManger.add(vehicle)
+    //阻挡物
+    const boxGeometry = new THREE.BoxGeometry(1, 1, 1)
+    boxGeometry.computeBoundingSphere()
+    const boxMaterial = new THREE.MeshStandardMaterial({
+        color: 0xff0000
+    })
+    const boxMesh = new THREE.Mesh(boxGeometry, boxMaterial)
+    boxMesh.position.set(0, 0, 5)
+    boxMesh.castShadow = true
+    scene.add(boxMesh)
+
+    const obstacle = new YUKA.GameEntity()
+    obstacle.setRenderComponent(boxMesh,(entity, renderTarget)=>{
+        // renderTarget.matrix.copy(entity.worldMatrix)
+    })
+    obstacle.position.copy(boxMesh.position)
+    obstacle.boundingRadius = boxGeometry.boundingSphere.radius
+    entityManger.add(obstacle)
+    const aviodObstacleBehavior = new YUKA.ObstacleAvoidanceBehavior([obstacle])
+    aviodObstacleBehavior.weight = 20   
+    vehicle.steering.add(aviodObstacleBehavior)
     showPathLine(path)
     function showPathLine(path) {
         let points = []
@@ -95,6 +122,35 @@ onMounted(() => {
         const line = new THREE.Line(lineGeometry, lineMaterial)
         scene.add(line)
     }
+
+    const raycaster = new THREE.Raycaster()
+    const mouse = new THREE.Vector2()
+
+    const clickMesh = new THREE.Mesh(new THREE.SphereGeometry(0.1, 32, 32), new THREE.MeshBasicMaterial({
+        color: 0x00ff00
+    }))
+    clickMesh.position.set(0, 0, 0)
+    scene.add(clickMesh)
+    window.addEventListener('click', (event) => {
+        mouse.x = (event.clientX / threeContainer.value.clientWidth) * 2 - 1
+        mouse.y = -(event.clientY / threeContainer.value.clientHeight) * 2 + 1
+        raycaster.setFromCamera(mouse, camera)
+        const intersects = raycaster.intersectObjects(scene.children)
+        if (intersects.length > 0) {
+            console.log('intersects: ', intersects);
+            const intersect = intersects[0]
+            if (intersect.object === groundMesh) {
+                const target = intersect.point
+                clickMesh.position.copy(target)
+                arriveBehavior.target.copy(target)
+            }
+        }
+    })
+    window.addEventListener('resize', () => {
+        camera.aspect = threeContainer.value.clientWidth / threeContainer.value.clientHeight
+        camera.updateProjectionMatrix()
+        renderer.setSize(threeContainer.value.clientWidth, threeContainer.value.clientHeight)
+    })
     requestAnimationFrame(function animate() {
         controls.update()
         const delta = clock.getDelta()
