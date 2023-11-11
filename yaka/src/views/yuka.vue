@@ -6,14 +6,21 @@
 import { ref, onMounted } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+//导入fbx模型
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js'
+//导入gltf模型
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import * as YUKA from 'yuka'
 
 const threeContainer = ref(null)
-onMounted(() => {
+let vehicle;
+onMounted(async() => {
+    let model = null;
+    let line;
     const scene = new THREE.Scene()
+    scene.background = new THREE.Color(0xaaaaaa)
     const camera = new THREE.PerspectiveCamera(75, threeContainer.value.clientWidth / threeContainer.value.clientHeight, 0.1, 1000)
     camera.position.set(5, 10, 10)
-    camera.lookAt(0, 0, 0)
     const renderer = new THREE.WebGLRenderer({
         antialias: true,
         // alpha: true
@@ -21,96 +28,137 @@ onMounted(() => {
     renderer.setSize(threeContainer.value.clientWidth, threeContainer.value.clientHeight)
     renderer.shadowMap.enabled = true
     threeContainer.value.appendChild(renderer.domElement)
-    const groundGeometry = new THREE.PlaneGeometry(100, 100)
-    const groundMaterial = new THREE.MeshStandardMaterial({
-        color: 0x999999,
-        // side: THREE.DoubleSide
-    })
-    const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial)
-
-    groundMesh.receiveShadow = true
-    groundMesh.rotation.x = -Math.PI/2
-    groundMesh.position.y = -0.5
-    scene.add(groundMesh)
     const light = new THREE.SpotLight(0xffffff,3, 100, Math.PI/6, 0.5, .5)//prenumber是光源强度，
     light.position.set(0,30, 10)
     light.castShadow = true
     scene.add(light)
     const lightHelper = new THREE.SpotLightHelper(light)
-    scene.add(lightHelper)
-    
+    // scene.add(lightHelper)
+    const ambientLight = new THREE.AmbientLight(0xffffff, .5)
+    scene.add(ambientLight)
     const controls = new OrbitControls(camera, renderer.domElement)
     const clock = new THREE.Clock()
     const axisHelper = new THREE.AxesHelper(5)
     scene.add(axisHelper)
-    
+    const loader = new GLTFLoader();
+    await new Promise((resolve, reject) => {
+        loader.load('/模型.glb', (gltf) => {
+            const gltfscene = gltf.scene; // 使用gltf.scene替换错误的object引用
+            model = gltfscene.children[0]
+            model.castShadow = true
+            model.position.set(0, .5, 0)
+            model.matrixAutoUpdate = false
+            scene.add(model)
 
-    const coneGeometry = new THREE.ConeGeometry(.2, 1, 32)
-    const coneMaterial = new THREE.MeshStandardMaterial({
-        color: 0x00ff00
+            vehicle = new YUKA.Vehicle()
+            vehicle.maxSpeed = 5
+            vehicle.setRenderComponent(model,callback)
+            resolve()
+        }, undefined, function (error) {
+            console.error(error);
+        })
     })
-    const coneMesh = new THREE.Mesh(coneGeometry, coneMaterial)
-    coneMesh.castShadow = true
-    //改变几何体顶点和默认方向时，geometry可以不用更新，但是mesh的matrix需要更新
-    // coneGeometry.rotateX(Math.PI / 2)
-    // coneMesh.quaternion.copy(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2))
-    coneMesh.position.set(0, 0.5, 0)
-    coneMesh.matrixAutoUpdate = false
-    scene.add(coneMesh)
-
-    const vehicle = new YUKA.Vehicle()
-    vehicle.maxSpeed = 5
-    vehicle.setRenderComponent(coneMesh,callback)
+    let intersectObjects = []
+    new Promise((resolve, reject) => {
+        loader.load('/园区.glb', (gltf) => {
+            const gltfscene = gltf.scene; // 使用gltf.scene替换错误的object引用
+            // gltfscene.scale.set(0.01, 0.01, 0.01);
+            gltfscene.position.set(0, 2, 0);
+            gltfscene.traverse((child) => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                    // intersectObjects.push(child)
+                }
+            });
+            // 将GLTF模型的场景添加到您现有的Three.js场景中
+            scene.add(gltfscene); // 将'yourScene'替换为实际持有您场景的变量名
+            resolve(gltfscene)
+        }, undefined, function (error) {
+            console.error(error);
+        });
+    })
+    let navMesh;
+    const navMeshLoader = new YUKA.NavMeshLoader()
+    await new Promise((res,rej)=>{
+        navMeshLoader.load('/navMesh.glb').then((navigationMesh) => {
+            navMesh = navigationMesh
+            res()
+        }
+        )
+    })
+    let plane;
+    await new Promise((resolve, reject) => {
+        loader.load('/navMesh.glb', (gltf) => {
+            plane = gltf.scene; // 使用gltf.scene替换错误的object引用
+            plane.position.set(0, 2.5, 0);
+            plane.traverse((child) => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                    child.visible = false
+                    intersectObjects.push(child)
+                }
+            });
+            // 将GLTF模型的场景添加到您现有的Three.js场景中
+            scene.add(plane); // 将'yourScene'替换为实际持有您场景的变量名
+            resolve(plane)
+        }, undefined, function (error) {
+            console.error(error);
+        });
+    })
+    
     function callback(entity, renderTarget){
         renderTarget.matrix.copy(entity.worldMatrix)
-        //旋转矩阵绕x轴旋转
-        renderTarget.matrix.multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2))
-        // renderTarget.position.copy(entity.position)
-        // renderTarget.quaternion.copy(entity.rotation)
     }
 
-    const path = new YUKA.Path()
-    path.add(new YUKA.Vector3(0, 0, 0))
-    path.add(new YUKA.Vector3(0, 0, 10))
-    path.add(new YUKA.Vector3(10, 0, 10))
-    path.add(new YUKA.Vector3(10, 0, 0))
-    path.add(new YUKA.Vector3(0, 0, 0))
-    // path.loop = true
-    vehicle.position.copy(path.current())
-    vehicle.smoother = new YUKA.Smoother( 20 );
-    const followPathBehavior = new YUKA.FollowPathBehavior(path)
-    // vehicle.steering.add(followPathBehavior)
-    const keepOnPathBehavior = new YUKA.OnPathBehavior(path)
-    keepOnPathBehavior.weight = 10
-    // vehicle.steering.add(keepOnPathBehavior)
-    const arriveBehavior = new YUKA.ArriveBehavior(new YUKA.Vector3(0, 0, 0), 1, 0.01)
-    arriveBehavior.weight = 10
-    vehicle.steering.add(arriveBehavior)
+    // const path = new YUKA.Path()
+    // path.add(new YUKA.Vector3(0, 0, 0))
+    // path.add(new YUKA.Vector3(0, 0, 10))
+    // path.add(new YUKA.Vector3(10, 0, 10))
+    // path.add(new YUKA.Vector3(10, 0, 0))
+    // path.add(new YUKA.Vector3(0, 0, 0))
+    // // path.loop = true
+    // vehicle.position.copy(path.current())
+    // const followPathBehavior = new YUKA.FollowPathBehavior(path)
+    // // vehicle.steering.add(followPathBehavior)
+    // const keepOnPathBehavior = new YUKA.OnPathBehavior(path)
+    // keepOnPathBehavior.weight = 10
+    // // vehicle.steering.add(keepOnPathBehavior)
+    // const arriveBehavior = new YUKA.ArriveBehavior(new YUKA.Vector3(0, 0, 0), 1, 0.01)
+    // // arriveBehavior.weight = 10
+    // // vehicle.steering.add(arriveBehavior)
     const entityManger = new YUKA.EntityManager()
     entityManger.add(vehicle)
-    //阻挡物
-    const boxGeometry = new THREE.BoxGeometry(1, 1, 1)
-    boxGeometry.computeBoundingSphere()
-    const boxMaterial = new THREE.MeshStandardMaterial({
-        color: 0xff0000
-    })
-    const boxMesh = new THREE.Mesh(boxGeometry, boxMaterial)
-    boxMesh.position.set(0, 0, 5)
-    boxMesh.castShadow = true
-    scene.add(boxMesh)
+    // vehicle.smoother = new YUKA.Smoother( 10 );
+    // //阻挡物
+    // const boxGeometry = new THREE.BoxGeometry(1, 1, 1)
+    // boxGeometry.computeBoundingSphere()
+    // const boxMaterial = new THREE.MeshStandardMaterial({
+    //     color: 0xff0000
+    // })
+    // const boxMesh = new THREE.Mesh(boxGeometry, boxMaterial)
+    // boxMesh.position.set(0, 0, 5)
+    // boxMesh.castShadow = true
+    // scene.add(boxMesh)
 
-    const obstacle = new YUKA.GameEntity()
-    obstacle.setRenderComponent(boxMesh,(entity, renderTarget)=>{
-        // renderTarget.matrix.copy(entity.worldMatrix)
-    })
-    obstacle.position.copy(boxMesh.position)
-    obstacle.boundingRadius = boxGeometry.boundingSphere.radius
-    entityManger.add(obstacle)
-    const aviodObstacleBehavior = new YUKA.ObstacleAvoidanceBehavior([obstacle])
-    aviodObstacleBehavior.weight = 20   
-    vehicle.steering.add(aviodObstacleBehavior)
-    showPathLine(path)
+    // const obstacle = new YUKA.GameEntity()
+    // obstacle.setRenderComponent(boxMesh,(entity, renderTarget)=>{
+    //     // renderTarget.matrix.copy(entity.worldMatrix)
+    // })
+    // obstacle.position.copy(boxMesh.position)
+    // obstacle.boundingRadius = boxGeometry.boundingSphere.radius
+    // entityManger.add(obstacle)
+    // const aviodObstacleBehavior = new YUKA.ObstacleAvoidanceBehavior([obstacle])
+    // aviodObstacleBehavior.weight =  10  
+    // // vehicle.steering.add(aviodObstacleBehavior)
+    // showPathLine(path)
     function showPathLine(path) {
+        if(line){
+            scene.remove(line)
+            line.geometry.dispose()
+            line.material.dispose()
+        }
         let points = []
         for (let i = 0; i < path._waypoints.length; i++) {
             points.push(path._waypoints[i].x, path._waypoints[i].y, path._waypoints[i].z)
@@ -119,7 +167,7 @@ onMounted(() => {
             color: 0xff0000
         })
         const lineGeometry = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(points, 3))
-        const line = new THREE.Line(lineGeometry, lineMaterial)
+        line = new THREE.Line(lineGeometry, lineMaterial)
         scene.add(line)
     }
 
@@ -135,15 +183,37 @@ onMounted(() => {
         mouse.x = (event.clientX / threeContainer.value.clientWidth) * 2 - 1
         mouse.y = -(event.clientY / threeContainer.value.clientHeight) * 2 + 1
         raycaster.setFromCamera(mouse, camera)
-        const intersects = raycaster.intersectObjects(scene.children)
+        const intersects = raycaster.intersectObjects(intersectObjects)
         if (intersects.length > 0) {
             console.log('intersects: ', intersects);
             const intersect = intersects[0]
-            if (intersect.object === groundMesh) {
                 const target = intersect.point
                 clickMesh.position.copy(target)
-                arriveBehavior.target.copy(target)
-            }
+                // arriveBehavior.target.copy(target)
+                let from = vehicle.position
+                // 假设你有一个THREE.Vector3对象 named threeTarget
+                let yukaTarget = new YUKA.Vector3(target.x, target.y, target.z);
+                let to = yukaTarget
+
+                const path = navMesh.findPath(from, to)
+                const path1 = new YUKA.Path()
+                for(let item of path){
+                    path1.add(new YUKA.Vector3(item.x,item.y,item.z))
+                }
+                showPathLine(path1)
+                vehicle.steering.clear();
+                // const followPathBehavior = new YUKA.FollowPathBehavior(path1)
+                // followPathBehavior.weight = 10;
+                // vehicle.steering.add(followPathBehavior)
+
+                const onPathBehavior = new YUKA.OnPathBehavior(path1,.1,.1)
+                onPathBehavior.weight = 10;
+                vehicle.steering.add(onPathBehavior)
+
+                const arriveBehavior = new YUKA.ArriveBehavior(yukaTarget, 3, .1)
+                arriveBehavior.weight = 1;
+                vehicle.steering.add(arriveBehavior)
+
         }
     })
     window.addEventListener('resize', () => {
@@ -153,7 +223,15 @@ onMounted(() => {
     })
     requestAnimationFrame(function animate() {
         controls.update()
+        controls.target.copy(vehicle.position)
         const delta = clock.getDelta()
+        if(navMesh){
+            const currentRegion = navMesh.getRegionForPoint(vehicle.position)
+            if(currentRegion){
+                const distance = currentRegion.distanceToPoint(vehicle.position)
+                vehicle.position.y -= distance*.2
+            }
+        }
         // world.update(delta)
         if(entityManger)
         entityManger.update(delta)
@@ -161,6 +239,7 @@ onMounted(() => {
         requestAnimationFrame(animate)
 
     })
+
 
 })
 
