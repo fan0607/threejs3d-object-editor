@@ -42,7 +42,7 @@ onMounted(async() => {
     scene.add(axisHelper)
     const loader = new GLTFLoader();
     await new Promise((resolve, reject) => {
-        loader.load('/模型.glb', (gltf) => {
+        loader.load('../../public/模型.glb', (gltf) => {
             const gltfscene = gltf.scene; // 使用gltf.scene替换错误的object引用
             model = gltfscene.children[0]
             model.castShadow = true
@@ -60,7 +60,7 @@ onMounted(async() => {
     })
     let intersectObjects = []
     new Promise((resolve, reject) => {
-        loader.load('/园区.glb', (gltf) => {
+        loader.load('../../public/园区.glb', (gltf) => {
             const gltfscene = gltf.scene; // 使用gltf.scene替换错误的object引用
             // gltfscene.scale.set(0.01, 0.01, 0.01);
             gltfscene.position.set(0, 2, 0);
@@ -81,7 +81,7 @@ onMounted(async() => {
     let navMesh;
     const navMeshLoader = new YUKA.NavMeshLoader()
     await new Promise((res,rej)=>{
-        navMeshLoader.load('/navMesh.glb').then((navigationMesh) => {
+        navMeshLoader.load('../../public/navMesh.glb').then((navigationMesh) => {
             navMesh = navigationMesh
             res()
         }
@@ -89,7 +89,7 @@ onMounted(async() => {
     })
     let plane;
     await new Promise((resolve, reject) => {
-        loader.load('/navMesh.glb', (gltf) => {
+        loader.load('../../public/navMesh.glb', (gltf) => {
             plane = gltf.scene; // 使用gltf.scene替换错误的object引用
             plane.position.set(0, 2.5, 0);
             plane.traverse((child) => {
