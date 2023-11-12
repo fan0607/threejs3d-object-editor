@@ -44,7 +44,9 @@ onMounted(async() => {
     scene.add(axisHelper)
     const loader = new GLTFLoader();
     await new Promise((resolve, reject) => {
-        loader.load(modelMeshModel, (gltf) => {
+        // loader.load(modelMeshModel, (gltf) => {
+            loader.load(new URL('../assets/模型.glb', import.meta.url).href, (gltf) => {
+
             const gltfscene = gltf.scene; // 使用gltf.scene替换错误的object引用
             model = gltfscene.children[0]
             model.castShadow = true
@@ -62,8 +64,9 @@ onMounted(async() => {
     })
     let intersectObjects = []
     new Promise((resolve, reject) => {
-        debugger
-        loader.load(yqMeshModel, (gltf) => {
+        // loader.load(yqMeshModel, (gltf) => {
+            loader.load(new URL('../assets/园区.glb', import.meta.url).href, (gltf) => {
+
             const gltfscene = gltf.scene; // 使用gltf.scene替换错误的object引用
             // gltfscene.scale.set(0.01, 0.01, 0.01);
             gltfscene.position.set(0, 2, 0);
@@ -84,15 +87,21 @@ onMounted(async() => {
     let navMesh;
     const navMeshLoader = new YUKA.NavMeshLoader()
     await new Promise((res,rej)=>{
-        navMeshLoader.load(navMeshModel).then((navigationMesh) => {
+        navMeshLoader.load(new URL('../assets/navMesh.glb', import.meta.url).href).then((navigationMesh) => {
             navMesh = navigationMesh
             res()
         }
+        /* navMeshLoader.load(navMeshModel).then((navigationMesh) => {
+            navMesh = navigationMesh
+            res()
+        } */
         )
     })
     let plane;
     await new Promise((resolve, reject) => {
-        loader.load(navMeshModel, (gltf) => {
+        // loader.load(navMeshModel, (gltf) => {
+            loader.load(new URL('../assets/navMesh.glb', import.meta.url).href, (gltf) => {
+
             plane = gltf.scene; // 使用gltf.scene替换错误的object引用
             plane.position.set(0, 2.5, 0);
             plane.traverse((child) => {
