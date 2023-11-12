@@ -62,6 +62,7 @@ onMounted(async() => {
     })
     let intersectObjects = []
     new Promise((resolve, reject) => {
+        debugger
         loader.load(yqMeshModel, (gltf) => {
             const gltfscene = gltf.scene; // 使用gltf.scene替换错误的object引用
             // gltfscene.scale.set(0.01, 0.01, 0.01);
