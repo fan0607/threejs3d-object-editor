@@ -41,6 +41,8 @@
             <el-menu-item index="/PhysicsThree">PhysicsThree</el-menu-item>
             <el-menu-item index="/GridPlane">GridPlane</el-menu-item>
             <el-menu-item index="/load">LoadModel</el-menu-item>
+            <el-menu-item index="/initWater">initWater</el-menu-item>
+
           </el-menu-item-group>
     </el-sub-menu>
     </el-menu>

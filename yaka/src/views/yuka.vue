@@ -11,9 +11,9 @@ import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js'
 //导入gltf模型
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import * as YUKA from 'yuka'
-import navMeshModel from '@/assets/navMesh.glb';
-import yqMeshModel from '@/assets/园区.glb';
-import modelMeshModel from '@/assets/模型.glb';
+// import navMeshModel from '@/assets/navMesh.glb';
+// import yqMeshModel from '@/assets/园区.glb';
+// import modelMeshModel from '@/assets/模型.glb';
 const threeContainer = ref(null)
 let vehicle;
 onMounted(async() => {

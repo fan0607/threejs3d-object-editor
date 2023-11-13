@@ -8,6 +8,7 @@ const router = createRouter({
         { path: '/basicThree', component: () => import('../views/threejs/basicThree.vue') },
         { path: '/PhysicsThree', component: () => import('../views/threejs/PhysicsThree.vue') },
         { path: '/load', component: () => import('../views/threejs/LoadModel.vue') },
+        { path: '/initWater', component: () => import('../views/threejs/initWater.vue') },
         { path: '/CircleScan', component: () => import('../views/cesium/CircleScan.vue') },
         { path: '/InitBuilding', component: () => import('../views/cesium/InitBuilding.vue') },
         { path: '/InitCesium', component: () => import('../views/cesium/InitCesium.vue') },
