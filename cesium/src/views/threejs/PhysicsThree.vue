@@ -129,7 +129,7 @@ onMounted(() => {
         const ground = createParalellepiped(40, 1, 40, 0, pos, quat, new THREE.MeshPhongMaterial({ color: 0x202020 }));
         ground.castShadow = true;
         ground.receiveShadow = true; */
-        createBox(new THREE.Vector3(0, -0.5, 0), ZERO_QUATERNION, 750, 1, 750, 0, 2);//创建地板
+        createBox(new THREE.Vector3(0, -0.5, 0), ZERO_QUATERNION, 75, 1, 75, 0, 2);
         var quaternion = new THREE.Quaternion(0, 0, 0, 1);
         quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 18);
         createBox(new THREE.Vector3(0, -1.5, 0), quaternion, 8, 4, 10, 0);
@@ -140,7 +140,7 @@ onMounted(() => {
             for (var i = 0; i < nh; i++)
                 createBox(new THREE.Vector3(size * j - (size * (nw - 1)) / 2, size * i, 10), ZERO_QUATERNION, size, size, size, 10);
         createVehicle(new THREE.Vector3(0, 4, -20), ZERO_QUATERNION);
-        createRondomObject(new THREE.Vector3(0, 3, -10), ZERO_QUATERNION, 3);
+
     }
     // 生成随机形状的物体
     function createRondomObject(pos, quat, objectSize) {
@@ -514,12 +514,6 @@ onMounted(() => {
             q = tm.getRotation();
             chassisMesh.position.set(p.x(), p.y(), p.z());
             chassisMesh.quaternion.set(q.x(), q.y(), q.z(), q.w());
-            controls.target.copy(chassisMesh.position);
-            // 设置最小距离
-            controls.minDistance = 10;
-            // 设置最大距离
-            controls.maxDistance = 50;
-
 
         }
 

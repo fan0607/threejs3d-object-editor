@@ -28,6 +28,7 @@
             <el-menu-item index="/ThreejsWaterWebgl1">ThreejsWaterWebgl1</el-menu-item>
             <el-menu-item index="/FloodingAnalysis">FloodingAnalysis</el-menu-item>
             <el-menu-item index="/ClippingPlanes">ClippingPlanes</el-menu-item>
+            <el-menu-item index="/WallCesium">WallCesium</el-menu-item>
           </el-menu-item-group>
       </el-sub-menu>
       <el-sub-menu>
@@ -41,6 +42,7 @@
             <el-menu-item index="/PhysicsThree">PhysicsThree</el-menu-item>
             <el-menu-item index="/GridPlane">GridPlane</el-menu-item>
             <el-menu-item index="/load">LoadModel</el-menu-item>
+            <el-menu-item index="/quaternionThree">quaternionThree</el-menu-item>
             <el-menu-item index="/initWater">initWater</el-menu-item>
 
           </el-menu-item-group>

@@ -8,7 +8,9 @@ const router = createRouter({
         { path: '/basicThree', component: () => import('../views/threejs/basicThree.vue') },
         { path: '/PhysicsThree', component: () => import('../views/threejs/PhysicsThree.vue') },
         { path: '/load', component: () => import('../views/threejs/LoadModel.vue') },
+        { path: '/quaternionThree', component: () => import('../views/threejs/quaternionThree.vue') },
         { path: '/initWater', component: () => import('../views/threejs/initWater.vue') },
+
         { path: '/CircleScan', component: () => import('../views/cesium/CircleScan.vue') },
         { path: '/InitBuilding', component: () => import('../views/cesium/InitBuilding.vue') },
         { path: '/InitCesium', component: () => import('../views/cesium/InitCesium.vue') },
@@ -18,6 +20,7 @@ const router = createRouter({
         { path: '/ThreejsWaterWebgl1', component: () => import('../views/cesium/ThreejsWaterWebgl1.vue') },
         { path: '/FloodingAnalysis', component: () => import('../views/cesium/FloodingAnalysis.vue') },
         { path: '/ClippingPlanes', component: () => import('../views/cesium/ClippingPlanes.vue') },
+        { path: '/WallCesium', component: () => import('../views/cesium/WallCesium.vue') },
     ]
 })
 export default router

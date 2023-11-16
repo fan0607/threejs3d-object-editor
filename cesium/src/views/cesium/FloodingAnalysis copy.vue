@@ -1,7 +1,7 @@
 <template>
   <div ref="cesiumContainer">
-  <el-button @click="draw('POLYGON')" style="position: absolute;right: 0;z-index: 100;">POLYGON</el-button>
-  <el-button @click="draw('RECTANGLE')" style="position: absolute;right: 200;z-index: 100;">RECTANGLE</el-button>
+  <el-button @click="analys" style="position: absolute;right: 0;z-index: 100;">analys</el-button>
+
   </div>
 </template>
 
@@ -11,7 +11,6 @@ import { onMounted, ref } from "vue";
 import * as Cesium from "cesium";
 import Drawer from '@cesium-extends/drawer';
 import "cesium/Build/Cesium/Widgets/widgets.css";
-import source from '@/utils/ThreeWater/shader/source.glsl?raw'
 const cesiumContainer = ref(null);
 let viewer, aper, clipPlanes;
 onMounted(() => {
@@ -51,14 +50,312 @@ async function init() {
     clock: null,
     terrainShadows: Cesium.ShadowMode.DISABLED,
   });
-  // viewer.scene.globe.depthTestAgainstTerrain = true; //开启深度检测
+  viewer.scene.globe.depthTestAgainstTerrain = true; //开启深度检测
 
     viewer.scene.setTerrain(
       new Cesium.Terrain(Cesium.CesiumTerrainProvider.fromIonAssetId(1))
     );
     const tilesetBuildings = viewer.scene.primitives.add(
       await Cesium.Cesium3DTileset.fromIonAssetId(75343)
-    ); 
+    );
+    const center = {
+      x: 121.466139,
+      y: 31.257341,
+      z: 0,
+    };
+    let points = []
+    const drawer = new Drawer(viewer, {
+      action: (action, move) => {
+        if(action === 'LEFT_CLICK'){
+          console.log('points: ', move);
+          // waterWebGL2(viewer,points)
+        }
+      },
+    });
+    drawer.start({
+      type: 'POLYGON',
+      finalOptions: {
+        material: Cesium.Color.RED.withAlpha(0.5),
+      },
+      onPointsChange: (e) => {
+        points = e.positions
+      },
+      onEnd:(e)=>{
+        console.log(e);
+        createPrimitiveFromEntityPolygon(viewer,e.polygon)
+        // waterWebGL2(viewer,e.polygon)
+      }
+    });
+}
+let primitive;
+function waterWebGL2(viewer, polygon){
+  let extrudedHeight = 0;
+  let instance = new Cesium.GeometryInstance({
+    geometry: polygon,
+    /* geometry: new Cesium.RectangleGeometry({
+      rectangle: Cesium.Rectangle.fromDegrees(-91.0, 50.0, -90.0, 51),
+      vertexFormat: Cesium.EllipsoidSurfaceAppearance.VERTEX_FORMAT,
+      extrudedHeight: extrudedHeight,
+    }), */
+  });
+ 
+  // 自定义材质
+  aper = new Cesium.MaterialAppearance({
+    material: new Cesium.Material({
+      fabric: {
+        uniforms: {
+          iTime: 0,
+        },
+        source: `
+        const int NUM_STEPS = 8;
+        const float PI     = 3.141592;
+        const float EPSILON  = 1e-3;
+        //#define EPSILON_NRM (0.1 / iResolution.x)
+        #define EPSILON_NRM (0.1 / 200.0)
+        // sea
+        const int ITER_GEOMETRY = 3;
+        const int ITER_FRAGMENT = 5;
+        const float SEA_HEIGHT = 0.6;
+        const float SEA_CHOPPY = 4.0;
+        const float SEA_SPEED = 1.8;
+        const float SEA_FREQ = 0.16;
+        const vec3 SEA_BASE = vec3(0.1,0.19,0.22);
+        const vec3 SEA_WATER_COLOR = vec3(0.8,0.9,0.6);
+        //#define SEA_TIME (1.0 + iTime * SEA_SPEED)
+        const mat2 octave_m = mat2(1.6,1.2,-1.2,1.6);
+        // math
+        mat3 fromEuler(vec3 ang) {
+          vec2 a1 = vec2(sin(ang.x),cos(ang.x));
+          vec2 a2 = vec2(sin(ang.y),cos(ang.y));
+          vec2 a3 = vec2(sin(ang.z),cos(ang.z));
+          mat3 m;
+          m[0] = vec3(a1.y*a3.y+a1.x*a2.x*a3.x,a1.y*a2.x*a3.x+a3.y*a1.x,-a2.y*a3.x);
+          m[1] = vec3(-a2.y*a1.x,a1.y*a2.y,a2.x);
+          m[2] = vec3(a3.y*a1.x*a2.x+a1.y*a3.x,a1.x*a3.x-a1.y*a3.y*a2.x,a2.y*a3.y);
+          return m;
+        }
+        float hash( vec2 p ) {
+          float h = dot(p,vec2(127.1,311.7));
+          return fract(sin(h)*43758.5453123);
+        }
+        float noise( in vec2 p ) {
+          vec2 i = floor( p );
+          vec2 f = fract( p );
+          vec2 u = f*f*(3.0-2.0*f);
+          return -1.0+2.0*mix( mix( hash( i + vec2(0.0,0.0) ),
+                  hash( i + vec2(1.0,0.0) ), u.x),
+                mix( hash( i + vec2(0.0,1.0) ),
+                  hash( i + vec2(1.0,1.0) ), u.x), u.y);
+        }
+        // lighting
+        float diffuse(vec3 n,vec3 l,float p) {
+          return pow(dot(n,l) * 0.4 + 0.6,p);
+        }
+        float specular(vec3 n,vec3 l,vec3 e,float s) {
+          float nrm = (s + 8.0) / (PI * 8.0);
+          return pow(max(dot(reflect(e,n),l),0.0),s) * nrm;
+        }
+        // sky
+        vec3 getSkyColor(vec3 e) {
+          e.y = max(e.y,0.0);
+          return vec3(pow(1.0-e.y,2.0), 1.0-e.y, 0.6+(1.0-e.y)*0.4);
+        }
+        // sea
+        float sea_octave(vec2 uv, float choppy) {
+          uv += noise(uv);
+          vec2 wv = 1.0-abs(sin(uv));
+          vec2 swv = abs(cos(uv));
+          wv = mix(wv,swv,wv);
+          return pow(1.0-pow(wv.x * wv.y,0.65),choppy);
+        }
+        float map(vec3 p) {
+          float freq = SEA_FREQ;
+          float amp = SEA_HEIGHT;
+          float choppy = SEA_CHOPPY;
+          vec2 uv = p.xz; uv.x *= 0.75;
+          float d, h = 0.0;
+          float SEA_TIME = 1.0 + iTime * SEA_SPEED;
+          for(int i = 0; i < ITER_GEOMETRY; i++) {
+            d = sea_octave((uv+SEA_TIME)*freq,choppy);
+            d += sea_octave((uv-SEA_TIME)*freq,choppy);
+            h += d * amp;
+            uv *= octave_m; freq *= 1.9; amp *= 0.22;
+            choppy = mix(choppy,1.0,0.2);
+          }
+          return p.y - h;
+        }
+        float map_detailed(vec3 p) {
+          float freq = SEA_FREQ;
+          float amp = SEA_HEIGHT;
+          float choppy = SEA_CHOPPY;
+          vec2 uv = p.xz; uv.x *= 0.75;
+          float SEA_TIME = 1.0 + iTime * SEA_SPEED;
+          float d, h = 0.0;
+          for(int i = 0; i < ITER_FRAGMENT; i++) {
+            d = sea_octave((uv+SEA_TIME)*freq,choppy);
+            d += sea_octave((uv-SEA_TIME)*freq,choppy);
+            h += d * amp;
+            uv *= octave_m; freq *= 1.9; amp *= 0.22;
+            choppy = mix(choppy,1.0,0.2);
+          }
+          return p.y - h;
+        }
+        vec3 getSeaColor(vec3 p, vec3 n, vec3 l, vec3 eye, vec3 dist) {
+          float fresnel = clamp(1.0 - dot(n,-eye), 0.0, 1.0);
+          fresnel = pow(fresnel,3.0) * 0.65;
+          vec3 reflected = getSkyColor(reflect(eye,n));
+          vec3 refracted = SEA_BASE + diffuse(n,l,80.0) * SEA_WATER_COLOR * 0.12;
+          vec3 color = mix(refracted,reflected,fresnel);
+          float atten = max(1.0 - dot(dist,dist) * 0.001, 0.0);
+          color += SEA_WATER_COLOR * (p.y - SEA_HEIGHT) * 0.18 * atten;
+          color += vec3(specular(n,l,eye,60.0));
+          return color;
+        }
+        // tracing
+        vec3 getNormal(vec3 p, float eps) {
+          vec3 n;
+          n.y = map_detailed(p);
+          n.x = map_detailed(vec3(p.x+eps,p.y,p.z)) - n.y;
+          n.z = map_detailed(vec3(p.x,p.y,p.z+eps)) - n.y;
+          n.y = eps;
+          return normalize(n);
+        }
+        float heightMapTracing(vec3 ori, vec3 dir, out vec3 p) {
+          float tm = 0.0;
+          float tx = 1000.0;
+          float hx = map(ori + dir * tx);
+          if(hx > 0.0) return tx;
+          float hm = map(ori + dir * tm);
+          float tmid = 0.0;
+          for(int i = 0; i < NUM_STEPS; i++) {
+            tmid = mix(tm,tx, hm/(hm-hx));
+            p = ori + dir * tmid;
+            float hmid = map(p);
+            if(hmid < 0.0) {
+              tx = tmid;
+              hx = hmid;
+            } else {
+              tm = tmid;
+              hm = hmid;
+            }
+          }
+          return tmid;
+        }
+            vec4 czm_getMaterial(vec2 vUv)
+            {
+              vec2 uv = vUv;
+              uv = vUv * 2.0 - 1.0;
+              float time = iTime * 0.3 + 0.0*0.01;
+              // ray
+              vec3 ang = vec3(0, 1.2, 0.0);
+                vec3 ori = vec3(0.0,3.5,0);
+              vec3 dir = normalize(vec3(uv.xy,-2.0)); dir.z += length(uv) * 0.15;
+              dir = normalize(dir) * fromEuler(ang);
+              // tracing
+              vec3 p;
+              heightMapTracing(ori,dir,p);
+              vec3 dist = p - ori;
+              vec3 n = getNormal(p, dot(dist,dist) * EPSILON_NRM);
+              vec3 light = normalize(vec3(0.0,1.0,0.8));
+              // color
+              vec3 color = mix(
+                getSkyColor(dir),
+                getSeaColor(p,n,light,dir,dist),
+                pow(smoothstep(0.0,-0.05,dir.y),0.3));
+                return vec4( pow(color,vec3(0.75)), 1.0 );
+            }
+          `,
+      }
+    }),
+    faceForward: true,
+    translucent: false,//是否透明
+    closed: true,
+    vertexShaderSource: `
+        in vec3 position3DHigh;
+        in vec3 position3DLow;
+        in float batchId;
+        in vec2 st;
+        in vec3 normal;
+        out vec2 v_st;
+        out vec3 v_positionEC;
+        out vec3 v_normalEC;
+        void main() {
+            v_st = st;
+            vec4 p = czm_computePosition();
+            v_positionEC = (czm_modelViewRelativeToEye * p).xyz;      // position in eye coordinates
+            v_normalEC = czm_normal * normal;                         // normal in eye coordinates
+            gl_Position = czm_modelViewProjectionRelativeToEye * p;
+        }
+                    `,
+    fragmentShaderSource: `
+      in vec2 v_st;
+      in vec3 v_positionEC;
+      in vec3 v_normalEC;
+      void main()  {
+        vec3 positionToEyeEC = -v_positionEC;
+        vec3 normalEC = normalize(v_normalEC);
+        czm_materialInput materialInput;
+        materialInput.normalEC = normalEC;
+        materialInput.positionToEyeEC = positionToEyeEC;
+        materialInput.st = v_st;
+        vec4 color = czm_getMaterial(v_st);
+        out_FragColor = color;
+      }
+                `,
+  });
+ 
+  let modelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(
+          Cesium.Cartesian3.fromDegrees(110, 40, 10)
+  );
+  primitive =
+  viewer.scene.primitives.add(
+    new Cesium.Primitive({
+      geometryInstances: instance,
+      asynchronous: false,
+      appearance: aper,
+      // modelMatrix: modelMatrix,
+    })
+  );
+  viewer.camera.setView({
+    destination: Cesium.Cartesian3.fromDegrees(-90.5, 50.5, 100000.0),
+    orientation: {
+      heading: Cesium.Math.toRadians(0.0),
+      pitch: Cesium.Math.toRadians(-90.0),
+      roll: 0.0,
+    },
+  });
+  function renderLoop(timestamp){
+    aper.material.uniforms.iTime = timestamp/1000;
+    requestAnimationFrame(renderLoop);
+  }
+  function analys(extrudedHeight,polygon){
+    setInterval(() => {
+          // 如果存在原始，则从场景中删除
+          if (primitive) {
+              viewer.scene.primitives.remove(primitive);
+          }
+
+          extrudedHeight += 10;
+          if (extrudedHeight > 1000) {
+              extrudedHeight = 1000;
+          }
+
+          // 使用新的extrudedHeight重新创建几何实例
+          let updatedInstance = new Cesium.GeometryInstance({
+              geometry: polygon,
+          });
+
+          primitive = new Cesium.Primitive({
+              geometryInstances: updatedInstance,
+              asynchronous: false,
+              appearance: aper,
+          });
+
+          viewer.scene.primitives.add(primitive);
+    }, 100);
+  }
+  renderLoop()
+  analys(extrudedHeight,polygon)
 }
 function waterWebGL1(viewer, center){
     let extrudedHeight = 0;
@@ -619,367 +916,56 @@ function createWall(viewer, center) {
   }
   renderLoop()
 }
-async function createPrimitiveFromEntityRectangle(viewer, entity, height){
-    let extrudedHeight = height;let primitive;
-    const maxHeight = height + 100;
-    let aper = new Cesium.MaterialAppearance({
-      material: new Cesium.Material({
-        fabric: {
-          uniforms: {
-            iTime: 0,
-          },
-          source: source,
-        }
-      }),
-      faceForward: true,
-      translucent: false,//是否透明
-      closed: true,
-      vertexShaderSource: `
-          in vec3 position3DHigh;
-          in vec3 position3DLow;
-          in float batchId;
-          in vec2 st;
-          in vec3 normal;
-          out vec2 v_st;
-          out vec3 v_positionEC;
-          out vec3 v_normalEC;
-          void main() {
-              v_st = st;
-              vec4 p = czm_computePosition();
-              v_positionEC = (czm_modelViewRelativeToEye * p).xyz;      // position in eye coordinates
-              v_normalEC = czm_normal * normal;                         // normal in eye coordinates
-              gl_Position = czm_modelViewProjectionRelativeToEye * p;
-          }
-                      `,
-      fragmentShaderSource: `
-        in vec2 v_st;
-        in vec3 v_positionEC;
-        in vec3 v_normalEC;
-        void main()  {
-          vec3 positionToEyeEC = -v_positionEC;
-          vec3 normalEC = normalize(v_normalEC);
-          czm_materialInput materialInput;
-          materialInput.normalEC = normalEC;
-          materialInput.positionToEyeEC = positionToEyeEC;
-          materialInput.st = v_st;
-          vec4 color = czm_getMaterial(v_st);
-          out_FragColor = color;
-        }
-                  `,
-    });
-    let polygonGraphics = entity._polygon;
-    let rectangleGraphics = entity._rectangle;
+function createPrimitiveFromEntityPolygon(viewer, entity){
+
+let polygonGraphics = entity._polygon;
+if (polygonGraphics && polygonGraphics.hierarchy) {
+    let hierarchy = polygonGraphics.hierarchy.getValue(Cesium.JulianDate.now());
+
+    // 获取角点
+    let positions = hierarchy.positions;
+
+    // 根据需要使用这些角点
+    // 例如，你可以转换它们为经纬度坐标
     let rectanglePoints = [];
-
-    if (polygonGraphics && polygonGraphics.hierarchy) {
-        let hierarchy = polygonGraphics.hierarchy.getValue(Cesium.JulianDate.now());
-
-        // 获取角点
-        let positions = hierarchy.positions;
-
-        // 根据需要使用这些角点
-        // 例如，你可以转换它们为经纬度坐标
-        for (let position of positions) {
-            let cartographic = Cesium.Cartographic.fromCartesian(position);
-            let longitude = Cesium.Math.toDegrees(cartographic.longitude);
-            let latitude = Cesium.Math.toDegrees(cartographic.latitude);
-            console.log(`Longitude: ${longitude}, Latitude: ${latitude}`);
-
-            // 这里直接使用Cartesian3.fromDegrees来得到正确的3D点
-            rectanglePoints.push(Cesium.Cartesian3.fromDegrees(longitude, latitude));
-        }
+    for (let position of positions) {
+        let cartographic = Cesium.Cartographic.fromCartesian(position);
+        let longitude = Cesium.Math.toDegrees(cartographic.longitude);
+        let latitude = Cesium.Math.toDegrees(cartographic.latitude);
+        console.log(`Longitude: ${longitude}, Latitude: ${latitude}`);
+        rectanglePoints.push(longitude);
     }
-    if(rectangleGraphics && rectangleGraphics.coordinates){
-      let rectangle = rectangleGraphics.coordinates.getValue(Cesium.JulianDate.now());
-      let southWest = Cesium.Rectangle.southwest(rectangle);
-      let northEast = Cesium.Rectangle.northeast(rectangle);
-      let southEast = new Cesium.Cartographic(northEast.longitude, southWest.latitude);
-      let northWest = new Cesium.Cartographic(southWest.longitude, northEast.latitude);
-      let corners = [southWest, southEast, northEast, northWest];
-      for (let corner of corners) {
-          let longitude = Cesium.Math.toDegrees(corner.longitude);
-          let latitude = Cesium.Math.toDegrees(corner.latitude);
-          console.log(`Longitude: ${longitude}, Latitude: ${latitude}`);
-          rectanglePoints.push(Cesium.Cartesian3.fromDegrees(longitude, latitude));
-      }
-    }
-    let polygonGeometry = new Cesium.PolygonGeometry({
-        polygonHierarchy: {
-            positions: rectanglePoints
-        },
-        extrudedHeight: 0,
-        // vertexFormat: Cesium.VertexFormat.POSITION_NORMAL_AND_ST,
-        vertexFormat: Cesium.EllipsoidSurfaceAppearance.VERTEX_FORMAT,
-    });
-    let rectangleGeometry = new Cesium.RectangleGeometry({
-      rectangle: rectangleGraphics.coordinates.getValue(Cesium.JulianDate.now()),
-      vertexFormat: Cesium.EllipsoidSurfaceAppearance.VERTEX_FORMAT,
-      extrudedHeight: extrudedHeight,
-    });
-    let geometryInstance = new Cesium.GeometryInstance({
-        geometry: rectangleGeometry,
-        attributes: {
-            color: Cesium.ColorGeometryInstanceAttribute.fromColor(Cesium.Color.BLUE)
-        }
-    });
-    primitive = new Cesium.Primitive({
-        geometryInstances: geometryInstance,
-        asynchronous: false,
-        appearance: aper,
-    });
-    viewer.scene.primitives.add(primitive);
-    setInterval(() => {
-          // 如果存在原始，则从场景中删除
-          if (primitive) {
-              viewer.scene.primitives.remove(primitive);
-          }
-
-          extrudedHeight += 10;
-          if (extrudedHeight > maxHeight) {
-              extrudedHeight = maxHeight;
-          }
-          polygonGeometry = new Cesium.PolygonGeometry({
-              polygonHierarchy: {
-                  positions: rectanglePoints
-              },
-              extrudedHeight: extrudedHeight,
-              vertexFormat: Cesium.VertexFormat.POSITION_NORMAL_AND_ST,
-          });
-          rectangleGeometry = new Cesium.RectangleGeometry({
-            rectangle: rectangleGraphics.coordinates.getValue(Cesium.JulianDate.now()),
-            vertexFormat: Cesium.EllipsoidSurfaceAppearance.VERTEX_FORMAT,
-            extrudedHeight: extrudedHeight,
-          });
-          // 使用新的extrudedHeight重新创建几何实例
-          let updatedInstance = new Cesium.GeometryInstance({
-              geometry: rectangleGeometry,
-          });
-
-          primitive = new Cesium.Primitive({
-              geometryInstances: updatedInstance,
-              asynchronous: false,
-              appearance: aper,
-          });
-
-          viewer.scene.primitives.add(primitive);
-    }, 100);
-    function renderLoop(timestamp){
-      aper.material.uniforms.iTime = timestamp/1000;
-      requestAnimationFrame(renderLoop);
-    }
-    renderLoop()
 }
+let viewer = new Cesium.Viewer('cesiumContainer');
 
+// 假设rectanglePoints是我们之前获得的顶点数组
+/* let rectanglePoints = [
+    Cesium.Cartesian3.fromDegrees(longitude1, latitude1),
+    Cesium.Cartesian3.fromDegrees(longitude2, latitude1),
+    Cesium.Cartesian3.fromDegrees(longitude2, latitude2),
+    Cesium.Cartesian3.fromDegrees(longitude1, latitude2)
+]; */
 
-
-
-
-
-
-async function createPrimitiveFromEntityPolygon(viewer, entity, height, points){
-let extrudedHeight = height;let primitive;
-const maxHeight = height + 1000;
-/* let aper = new Cesium.EllipsoidSurfaceAppearance({
-  material: new Cesium.Material({
-    fabric: {
-          type: "Water",
-          uniforms: {
-              normalMap: Cesium.buildModuleUrl(
-                  "Assets/Textures/waterNormals.jpg"
-              ),
-              frequency: 1000.0,
-              animationSpeed: 0.01,
-              amplitude: 10.0,
-          },
-      },
-
-  }),
-  faceForward: true,
-  translucent: true,//是否透明
-  // closed: true,
-  fragmentShaderSource: 'in vec3 v_positionMC;\n' +
-              'in vec3 v_positionEC;\n' +
-              'in vec2 v_st;\n' +
-              'void main()\n' +
-              '{\n' +
-              'czm_materialInput materialInput;\n' +
-              'vec3 normalEC = normalize(czm_normal3D * czm_geodeticSurfaceNormal(v_positionMC, vec3(0.0), vec3(1.0)));\n' +
-              '#ifdef FACE_FORWARD\n' +
-              'normalEC = faceforward(normalEC, vec3(0.0, 0.0, 1.0), -normalEC);\n' +
-              '#endif\n' +
-              'materialInput.s = v_st.s;\n' +
-              'materialInput.st = v_st;\n' +
-              'materialInput.str = vec3(v_st, 0.0);\n' +
-              'materialInput.normalEC = normalEC;\n' +
-              'materialInput.tangentToEyeMatrix = czm_eastNorthUpToEyeCoordinates(v_positionMC, materialInput.normalEC);\n' +
-              'vec3 positionToEyeEC = -v_positionEC;\n' +
-              'materialInput.positionToEyeEC = positionToEyeEC;\n' +
-              'czm_material material = czm_getMaterial(materialInput);\n' +
-              '#ifdef FLAT\n' +
-              'out_FragColor = vec4(material.diffuse + material.emission, material.alpha);\n' +
-              '#else\n' +
-              'out_FragColor = czm_phong(normalize(positionToEyeEC), material, czm_lightDirectionEC);\n' +
-              'out_FragColor.a=0.85;\n' +
-              '#endif\n' +
-              '}\n'
-}); */
-let aper = new Cesium.MaterialAppearance({
-      material: new Cesium.Material({
-        fabric: {
-          uniforms: {
-            iTime: 0,
-          },
-          source: source,
-        }
-      }),
-      faceForward: true,
-      translucent: false,//是否透明
-      closed: true,
-      vertexShaderSource: `
-          in vec3 position3DHigh;
-          in vec3 position3DLow;
-          in float batchId;
-          in vec2 st;
-          in vec3 normal;
-          out vec2 v_st;
-          out vec3 v_positionEC;
-          out vec3 v_normalEC;
-          void main() {
-              v_st = st;
-              // vec2 adjustedST = st * 0.001; // 缩放
-              // adjustedST = vec2(cos(angle) * st.x - sin(angle) * st.y, sin(angle) * st.x + cos(angle) * st.y); // 旋转
-              // adjustedST += translation; // 平移
-              // v_st = adjustedST;
-
-              vec4 p = czm_computePosition();
-              v_positionEC = (czm_modelViewRelativeToEye * p).xyz;      // position in eye coordinates
-              v_normalEC = czm_normal * normal;                         // normal in eye coordinates
-              gl_Position = czm_modelViewProjectionRelativeToEye * p;
-          }
-                      `,
-      fragmentShaderSource: `
-        in vec2 v_st;
-        in vec3 v_positionEC;
-        in vec3 v_normalEC;
-        void main()  {
-          vec3 positionToEyeEC = -v_positionEC;
-          vec3 normalEC = normalize(v_normalEC);
-          czm_materialInput materialInput;
-          materialInput.normalEC = normalEC;
-          materialInput.positionToEyeEC = positionToEyeEC;
-          materialInput.st = v_st;
-          vec4 color = czm_getMaterial(v_st);
-          out_FragColor = color;
-        }
-                  `,
-    });
-let rectanglePoints = [];
-points.forEach((item)=>{
-  let cartographic = Cesium.Cartographic.fromCartesian(item);
-  let longitude = Cesium.Math.toDegrees(cartographic.longitude);
-  let latitude = Cesium.Math.toDegrees(cartographic.latitude);
-  rectanglePoints.push(Cesium.Cartesian3.fromDegrees(longitude, latitude));
-})
 let polygonGeometry = new Cesium.PolygonGeometry({
-    polygonHierarchy: {
-        positions: rectanglePoints
-    },
-    extrudedHeight: 0,
-    vertexFormat: Cesium.VertexFormat.POSITION_NORMAL_AND_ST,
-    // vertexFormat: Cesium.EllipsoidSurfaceAppearance.VERTEX_FORMAT,
+    polygonHierarchy: new Cesium.PolygonHierarchy(rectanglePoints)
 });
 
 let geometryInstance = new Cesium.GeometryInstance({
     geometry: polygonGeometry,
     attributes: {
-        color: Cesium.ColorGeometryInstanceAttribute.fromColor(Cesium.Color.BLUE)
+        color: Cesium.ColorGeometryInstanceAttribute.fromColor(Cesium.Color.RED) // 为多边形设置红色
     }
 });
-primitive = new Cesium.Primitive({
+
+viewer.scene.primitives.add(new Cesium.Primitive({
     geometryInstances: geometryInstance,
-    asynchronous: false,
-    appearance: aper,
-});
-viewer.scene.primitives.add(primitive);
-setInterval(() => {
-      // 如果存在原始，则从场景中删除
-      if (primitive) {
-          viewer.scene.primitives.remove(primitive);
-      }
+    appearance: new Cesium.PerInstanceColorAppearance({
+        closed: true
+    })
+}));
 
-      extrudedHeight += 10;
-      if (extrudedHeight > maxHeight) {
-          extrudedHeight = maxHeight;
-      }
-      polygonGeometry = new Cesium.PolygonGeometry({
-          polygonHierarchy: {
-              positions: rectanglePoints
-          },
-          extrudedHeight: extrudedHeight,
-          vertexFormat: Cesium.VertexFormat.POSITION_NORMAL_AND_ST,
-      });
-      // 使用新的extrudedHeight重新创建几何实例
-      let updatedInstance = new Cesium.GeometryInstance({
-          geometry: polygonGeometry,
-      });
 
-      primitive = new Cesium.Primitive({
-          geometryInstances: updatedInstance,
-          asynchronous: false,
-          appearance: aper,
-      });
 
-      viewer.scene.primitives.add(primitive);
-}, 100);
-function renderLoop(timestamp){
-  // aper.material.uniforms.iTime = timestamp/1000;
-  requestAnimationFrame(renderLoop);
 }
-renderLoop()
-}
-function draw(type){
-  let points = []
-  const drawer = new Drawer(viewer, {
-      action: (action, move) => {
-        if(action === 'LEFT_CLICK'){
-          console.log('points: ', move);
-          // waterWebGL2(viewer,points)
-        }
-      },
-    });
-    drawer.start({
-      // type: 'RECTANGLE',
-      type: type,
-      finalOptions: {
-        material: Cesium.Color.RED.withAlpha(0),
-      },
-      onPointsChange: (e) => {
-        points = e.positions
-      },
-      onEnd:(e,p)=>{
-        let terrainProvider = viewer.terrainProvider;
-        let cartographic = [];
-        p.forEach((item)=>{
-          let p3 = Cesium.Cartographic.fromCartesian(item);
-          cartographic.push(p3)
-        })
-
-        const updatedPositions = Cesium.sampleTerrain(terrainProvider, 11, cartographic).then((updatedPositions) => {
-          console.log('updatedPositions: ', updatedPositions);
-          //计算高度
-          let height = updatedPositions[0].height;
-          if(type === 'POLYGON'){
-            createPrimitiveFromEntityPolygon(viewer,e,height,p)
-          }else if(type === 'RECTANGLE'){
-            createPrimitiveFromEntityRectangle(viewer,e,height)
-          }
-          // createPrimitiveFromEntityRectangle(viewer,e,height)
-        }).catch((err) => {
-          console.log('err: ', err);
-        });
-        }
-    });
-}
-
 </script>
 <style scoped></style>
