@@ -1,5 +1,6 @@
 <template>
     <div ref="threeOcean" class="threeMap"></div>
+    <div class="speed">当前速度：{{ speedPane }}</div>
 </template>
 
 <script setup lang="ts">
@@ -7,9 +8,20 @@ import { onMounted, ref } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import font from '../assets/Alimama FangYuanTi VF_Regular.json?url'
-import { FontLoader } from 'three/examples/jsm/Addons.js'
-import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry';
+import { FontLoader,TextGeometry } from 'three/examples/jsm/Addons.js'
+// import { TextGeometry } from 'three/examples/jsm/TextGeometry';//这是错误的
+import matcap from '../assets/C88467_5B3333_875C5A_7A3822-64px.png'
+import nx from '../assets/cube/nx.png'
+import px from '../assets/cube/px.png'
+import ny from '../assets/cube/ny.png'
+import py from '../assets/cube/py.png'
+import nz from '../assets/cube/nz.png'
+import pz from '../assets/cube/pz.png'
+// import matcap2 from 'https://makio135.com/matcaps/64/B66D59_F0C9B2_E5B49C_DAA084-64px.png'
+// import matcap3 from 'https://makio135.com/matcaps/64/B38B76_40251D_745042_5F3A30-64px.png'
+
 const threeOcean = ref();
+const speedPane = ref('0km/h');
 onMounted(() => {
     if (!threeOcean.value) return;
     Ammo().then(function (Ammo: any) {
@@ -73,8 +85,10 @@ onMounted(() => {
             initPhysics();
             createObjects();
             initInput();
-            const fonts = await initFontLoader();
-            scene.add(fonts);
+            const font = await initFontLoader('W S ↑ ↓ 动力',new THREE.Vector3(6, 0, 0));
+            const font2 = await initFontLoader('A D ← → 转向',new THREE.Vector3(6, 0, 10));
+            const font3 = await initFontLoader2('小心翻车！',new THREE.Vector3(6, .1, -10));
+            scene.add(font,font2,font3);
         }
         function initGraphics() {
             camera = new THREE.PerspectiveCamera(60, threeOcean.value.clientWidth / threeOcean.value.clientHeight, 0.1, 2000);
@@ -88,6 +102,23 @@ onMounted(() => {
             renderer.setSize(threeOcean.value.clientWidth, threeOcean.value.clientHeight);
             renderer.shadowMap.enabled = true;
             scene = new THREE.Scene();
+            scene.background = 
+            new THREE.CubeTextureLoader().load([
+                px, nx,
+                py, ny,
+                pz, nz
+            ]);
+            // //将天空盒放在box内部
+            // const boxSkyMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+            // boxSkyMaterial.map = new THREE.CubeTextureLoader().load([
+            //     px, nx,
+            //     py, ny,
+            //     pz, nz
+            // ]);
+            // const box = new THREE.Mesh(new THREE.BoxGeometry(1000, 1000, 1000), boxSkyMaterial);
+
+            // box.position.set(0, 0, 0);
+            // scene.add(box);
             const ambientLight = new THREE.AmbientLight(0xfa6900, 10);
             scene.add(ambientLight);
             // 线性光
@@ -109,7 +140,7 @@ onMounted(() => {
             scene.add(light);
             threeOcean.value.appendChild(renderer.domElement);
             controls = new OrbitControls(camera, renderer.domElement);
-            // controls.maxDistance = maxDistance;
+            controls.maxDistance = maxDistance;
             controls.maxPolarAngle = Math.PI / 2;
             window.addEventListener('resize', onWindowResize, false);
         }
@@ -131,7 +162,7 @@ onMounted(() => {
          */
         function createObjects() {
             //ground
-            createBox(new THREE.Vector3(0, -0.5, 0), ZERO_QUATERNION, 750, 1, 750, 0, 2);
+            createGround(new THREE.Vector3(0, -0.5, 0), ZERO_QUATERNION, 750, 1, 750, 0, 2);
             //车辆的创建
             objCar = createVehicle(new THREE.Vector3(0, 4, -20), ZERO_QUATERNION);
 
@@ -253,6 +284,7 @@ onMounted(() => {
             updatePhysics(deltaTime);
             if (objCar) {
                 controls.target.copy(objCar.position);
+                controls.target.setY(objCar.position.y + 2);
             }
             controls.update(deltaTime);
             if (camera.position.y < 0.1) {
@@ -327,6 +359,57 @@ onMounted(() => {
             })
         }
         /**
+         * 创建地面
+         * @param pos 位置
+         * @param quat 姿态四元数
+         * @param w width
+         * @param l length
+         * @param h height
+         * @param mass 质量
+         * @param friction 摩擦力
+         */
+         function createGround(pos: THREE.Vector3, quat: THREE.Quaternion, w: number, l: number, h: number, mass: number = 0, friction: number = 1) {
+            // const material = createRendomColorObjectMeatrial();
+            const material = initMatcap();
+            // const shape = new THREE.CircleGeometry(w, l, h, 1, 1, 1);
+            //圆柱
+            const shape = new THREE.CylinderGeometry(w, w, l, 24, 1);
+
+            const geometry = new Ammo.btBoxShape(new Ammo.btVector3(w * 0.5, l * 0.5, h * 0.5));
+            // const transparentMaterial = new THREE.MeshPhongMaterial({ opacity: 0, transparent: true });
+            const mesh = new THREE.Mesh(shape, material);
+            mesh.position.copy(pos);
+            mesh.quaternion.copy(quat);
+            scene.add(mesh);
+            const transform = new Ammo.btTransform();
+            transform.setIdentity();
+            transform.setOrigin(new Ammo.btVector3(pos.x, pos.y, pos.z));
+            transform.setRotation(new Ammo.btQuaternion(quat.x, quat.y, quat.z, quat.w));
+            const motionState = new Ammo.btDefaultMotionState(transform);
+            const localInertia = new Ammo.btVector3(0, 0, 0);
+            geometry.calculateLocalInertia(mass, localInertia);
+            const rbInfo = new Ammo.btRigidBodyConstructionInfo(mass, motionState, geometry, localInertia);
+            const body = new Ammo.btRigidBody(rbInfo);
+            body.setFriction(friction);
+
+            physicsWorld.addRigidBody(body);
+            if (mass > 0) {
+                body.setActivationState(DISABLE_DEACTIVATION);
+                // 同步物理场景和绘图空间
+                function sync() {
+                    const ms = body.getMotionState();
+                    if (ms) {
+                        ms.getWorldTransform(TRANSFORM_AUX);
+                        const p = TRANSFORM_AUX.getOrigin();
+                        const q = TRANSFORM_AUX.getRotation();
+                        mesh.position.set(p.x(), p.y(), p.z());
+                        mesh.quaternion.set(q.x(), q.y(), q.z(), q.w());
+                    }
+                }
+                syncList.push(sync);
+            }
+        }
+        /**
          * 车辆系统
          * @param pos 位置
          * @param quat 姿态四元数
@@ -344,15 +427,18 @@ onMounted(() => {
             mesh.position.copy(pos);
             mesh.quaternion.copy(quat);
             scene.add(mesh);
+
             const transform = new Ammo.btTransform();
-            transform.setIdentity();
-            transform.setOrigin(new Ammo.btVector3(pos.x, pos.y, pos.z));
-            transform.setRotation(new Ammo.btQuaternion(quat.x, quat.y, quat.z, quat.w));
-            const motionState = new Ammo.btDefaultMotionState(transform);
-            const localInertia = new Ammo.btVector3(0, 0, 0);
-            geometry.calculateLocalInertia(mass, localInertia);
-            const rbInfo = new Ammo.btRigidBodyConstructionInfo(mass, motionState, geometry, localInertia);
-            const body = new Ammo.btRigidBody(rbInfo);
+            transform.setIdentity();//初始化
+            transform.setOrigin(new Ammo.btVector3(pos.x, pos.y, pos.z));//设置位置
+            transform.setRotation(new Ammo.btQuaternion(quat.x, quat.y, quat.z, quat.w));//设置旋转
+            const motionState = new Ammo.btDefaultMotionState(transform);//设置运动状态
+
+            const localInertia = new Ammo.btVector3(0, 0, 0);//设置惯性
+            geometry.calculateLocalInertia(mass, localInertia);//计算惯性，质量越大惯性越大
+
+            const rbInfo = new Ammo.btRigidBodyConstructionInfo(mass, motionState, geometry, localInertia);//创建刚体信息
+            const body = new Ammo.btRigidBody(rbInfo);//创建刚体
             body.setFriction(friction);
 
             physicsWorld.addRigidBody(body);
@@ -488,10 +574,80 @@ onMounted(() => {
             addWheel(false, new Ammo.btVector3(-wheelHalfTrackBack, wheelAxisHeightBack, wheelAxisPositionBack), wheelRadiusBack, wheelWidthBack, BACK_LEFT);
             addWheel(false, new Ammo.btVector3(wheelHalfTrackBack, wheelAxisHeightBack, wheelAxisPositionBack), wheelRadiusBack, wheelWidthBack, BACK_RIGHT);
 
+            // 设置目标位置
+            // let targetPosition = new Ammo.btVector3(10, 0, 10);
+            // let arrive = false;
+            // 每帧调用的更新函数
+            // function updateVehicle() {
+            //     if(!targetPosition) return;
+            //     engineForce = 0;
+            //     vehicleSteering = 0;
+            //     breakingForce = 0;
+            //     // 获取当前位置
+            //     const currentPosition = vehicle.getChassisWorldTransform().getOrigin();
+            //     const distance = currentPosition.length(targetPosition);
+            //     const angle = Math.atan2(targetPosition.x() - currentPosition.x(), targetPosition.z() - currentPosition.z());
+            //     // 检查是否接近目标位置
+            //     if (distance > 5) {
+            //         console.log('distance: ', distance);
+            //         engineForce = maxEngineForce; // 设定引擎力
+            //         breakingForce = 0; // 无需制动
+            //         // ... 这里还应该包括转向逻辑
+            //         if(angle!=0){
+            //             vehicleSteering = clamp(steeringValueBasedOnAngle(angle), -steeringClamp, steeringClamp);
+            //         }else{
+            //             vehicleSteering = 0;
+            //         }
+
+            //     } else {
+            //         // 接近目标位置，减速
+            //         engineForce = 0;
+            //         breakingForce = maxBreakingForce;
+            //         targetPosition = null;
+            //         arrive = true;
+            //     }
+
+            //     // 应用力和制动
+            //     vehicle.applyEngineForce(engineForce, BACK_LEFT);
+            //     vehicle.applyEngineForce(engineForce, BACK_RIGHT);
+            //     vehicle.setBrake(breakingForce, FRONT_LEFT);
+            //     vehicle.setBrake(breakingForce, FRONT_RIGHT);
+            //     vehicle.setBrake(breakingForce, BACK_LEFT);
+            //     vehicle.setBrake(breakingForce, BACK_RIGHT);
+            //     vehicle.setSteeringValue(vehicleSteering, FRONT_LEFT);
+            //     vehicle.setSteeringValue(vehicleSteering, FRONT_RIGHT);
+            //     // 辅助函数来确保值在特定范围内
+            //     function clamp(value:number, min:number, max:number) {
+            //         return Math.max(min, Math.min(max, value));
+            //     }
+            //     function steeringValueBasedOnAngle(angleDifference:number) {
+            //         const maxSteeringValue = steeringClamp; // 假设的最大转向值
+            //         const angleRange = 90; // 假设当角度差为90度时，转向值应为最大
+
+            //         // 根据角度差计算转向值
+            //         let steeringValue = (angleDifference / angleRange) * maxSteeringValue;
+
+            //         // 确保转向值不超过允许的最大值
+            //         steeringValue = clamp(steeringValue, -maxSteeringValue, maxSteeringValue);
+
+            //         return steeringValue;
+            //     }
+
+            //     // 更新车辆位置和方向
+            //     // sync();
+            //     requestAnimationFrame(updateVehicle)
+            // }
+            // updateVehicle()
             // 将键盘输入,物理和绘制同步
             function sync() {
                 const speed = vehicle.getCurrentSpeedKmHour();
                 // speedometer.innerHTML = (speed < 0 ? '(R) ' : '') + Math.abs(speed).toFixed(1) + ' km/h';
+                speedPane.value = (speed < 0 ? '(R) ' : '') + Math.abs(speed).toFixed(1) + ' km/h';
+                // if(!targetPosition){
+                //     breakingForce = 0;
+                //     engineForce = 0;
+                // }
+
                 breakingForce = 0;
                 engineForce = 0;
                 if (actions.acceleration) {
@@ -525,7 +681,11 @@ onMounted(() => {
                         }
                     }
                 }
-
+                // if(arrive){
+                //     engineForce = 0;
+                //     breakingForce = maxBreakingForce
+                //     arrive = false;
+                // }
                 vehicle.applyEngineForce(engineForce, BACK_LEFT);
                 vehicle.applyEngineForce(engineForce, BACK_RIGHT);
                 vehicle.setBrake(breakingForce / 2, FRONT_LEFT);
@@ -563,11 +723,11 @@ onMounted(() => {
 
     });
 })
-async function initFontLoader() {
+async function initFontLoader(text:string,pos:THREE.Vector3) {
     const loader = new FontLoader();
     let fonts = await new Promise<THREE.Mesh>((resolve) => {
         loader.load(font, (font) => {
-            const geometry = new TextGeometry('上下左右控制方向', {
+            const geometry = new TextGeometry(text, {
                 font: font,
                 size: 1.6,
                 height: .05,
@@ -583,6 +743,7 @@ async function initFontLoader() {
             // mesh.applyQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2));
             mesh.rotateY(Math.PI);
             mesh.rotateX(-Math.PI / 2);
+            mesh.position.copy(pos);
             resolve(mesh);
         }, (xhr) => {
             console.log((xhr.loaded / xhr.total * 100) + '% loaded');
@@ -593,6 +754,43 @@ async function initFontLoader() {
         });
     })
     return fonts;
+}
+async function initFontLoader2(text:string,pos:THREE.Vector3) {
+    const loader = new FontLoader();
+    let fonts = await new Promise<THREE.Mesh>((resolve) => {
+        loader.load(font, (font) => {
+            const geometry = new TextGeometry(text, {
+                font: font,
+                size: 3,
+                height: .5,
+                curveSegments: 12,//曲线段数
+                bevelEnabled: true,
+                bevelThickness: .010,//斜角厚度
+                bevelSize: .08,//斜角大小
+                bevelOffset: 0,
+                bevelSegments: 5
+            });
+            const material = new THREE.MeshPhongMaterial({ color: 0xffffff });
+            const mesh = new THREE.Mesh(geometry, material);
+            // mesh.applyQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2));
+            mesh.rotateY(Math.PI);
+            mesh.rotateX(-Math.PI / 2);
+            mesh.position.copy(pos);
+            resolve(mesh);
+        }, (xhr) => {
+            console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+        }, (err) => {
+            console.log('err: ', err);
+            console.log('An error happened');
+
+        });
+    })
+    return fonts;
+}
+function initMatcap(){
+    const matcapTexture = new THREE.TextureLoader().load(matcap);
+    const matcapMaterial = new THREE.MeshMatcapMaterial({ matcap: matcapTexture });
+    return matcapMaterial;
 }
 
 
@@ -611,5 +809,17 @@ async function initFontLoader() {
     background-image: -moz-linear-gradient(0deg, rgb(255, 216, 189), rgb(255, 185, 179));
     background-image: -webkit-linear-gradient(0deg, rgb(255, 216, 189), rgb(255, 185, 179));
     background-image: linear-gradient(0deg, rgb(255, 216, 189), rgb(255, 185, 179));
+}
+.speed{
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
+    color: #fff;
+    font-size: 20px;
+    font-weight: bold;
+    padding: 10px;
+    background: rgba(0,0,0,.5);
+    border-radius: 5px;
 }
 </style>
