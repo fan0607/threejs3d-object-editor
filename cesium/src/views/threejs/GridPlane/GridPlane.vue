@@ -12,45 +12,53 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import * as THREE from 'three'
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { DragControls } from 'three/examples/jsm/controls/DragControls.js'
-// import { saveString } from 'three/examples/jsm/utils/FileSaver.js'
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js'
+import onWindowResize from './utils/events'
+import {initScene} from './utils/initScene'
 
 const threeOcean = ref(null)
-const meshArr = ref([])
-let basicGeometry, cubeMaterial, raycaster, pointer, plane, objects = [], isShiftDown = false, camera, rollOverMaterial, rollOverMesh, scene, renderer;
-onMounted(() => {
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-    renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(width, height);
-    threeOcean.value.appendChild(renderer.domElement);
+let basicGeometry,
+    cubeMaterial,
+    plane,
+    objects = [],
+    isShiftDown = false,
+    camera, rollOverMaterial, scene, renderer,controls;
 
-    scene = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 10000);
-    camera.position.set(500, 800, 1300);
-    camera.lookAt(0, 0, 0);
-    scene.add(camera);
-    scene.background = new THREE.Color(0xf0f0f0);
-    // roll-over helpers
+let rollOverMesh = null;//鼠标移动的小方块
+let raycaster = null;//射线
+let pointer = null;//鼠标位置
+onMounted(() => {
+    [scene,renderer,camera,controls] = initScene(threeOcean.value.clientWidth, threeOcean.value.clientHeight, threeOcean);
+    raycaster = new THREE.Raycaster();
+    pointer = new THREE.Vector2();
+    initObjects(scene);
+    bindEvents();
+    (function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+    })();
+})
+function createrollOverMesh(){
     const rollOverGeo = new THREE.BoxGeometry(50, 50, 50);
     rollOverMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, opacity: 0.5, transparent: true });
     rollOverMesh = new THREE.Mesh(rollOverGeo, rollOverMaterial);
+    return rollOverMesh;
+}
+function initObjects(scene){
+    // roll-over helpers
+    const rollOverMesh = createrollOverMesh()
     scene.add(rollOverMesh);
 
-    // cubes
+    // cubes 立方体
     basicGeometry = new THREE.BoxGeometry(50, 50, 50);
     cubeMaterial = new THREE.MeshLambertMaterial({ color: 0xfeb74c });
 
     // grid
-    const gridHelper = new THREE.GridHelper(1000, 20);
+    const gridHelper = new THREE.GridHelper(10000, 200);
     scene.add(gridHelper);
 
-    raycaster = new THREE.Raycaster();
-    pointer = new THREE.Vector2();
-
-    const geometry = new THREE.PlaneGeometry(1000, 1000);
+    const geometry = new THREE.PlaneGeometry(10000, 10000);
     geometry.rotateX(- Math.PI / 2);
 
     plane = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ visible: false }));
@@ -58,54 +66,19 @@ onMounted(() => {
 
     objects.push(plane);
 
-    // lights
-
-    const ambientLight = new THREE.AmbientLight(0x606060, 3);
-    scene.add(ambientLight);
-
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 3);
-    directionalLight.position.set(1, 0.75, 0.5).normalize();
-    scene.add(directionalLight);
-
-
+    const axisHelper = new THREE.AxesHelper(1000);
+    scene.add(axisHelper);
+}
+function bindEvents(){
     document.addEventListener('pointermove', onPointerMove);
     document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('keydown', onDocumentKeyDown);
     document.addEventListener('keyup', onDocumentKeyUp);
-
-    window.addEventListener('resize', onWindowResize);
-
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.2;
-    controls.enableZoom = true;
-    controls.enableRotate = true;
-    controls.enablePan = true;
-    const axisHelper = new THREE.AxesHelper(1000);
-    scene.add(axisHelper);
-    // gridHelper(scene);
-    // const dragControls = new DragControls(meshArr.value, camera, renderer.domElement);
-
-    (function animate() {
-        requestAnimationFrame(animate);
-        controls.update();
-        renderer.render(scene, camera);
-    })();
-
-})
-function onWindowResize() {
-
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-
-    renderer.setSize(window.innerWidth, window.innerHeight);
-
-
+    window.addEventListener('resize', ()=>{onWindowResize(camera, renderer, threeOcean.value.clientWidth, threeOcean.value.clientHeight)}, false);
 }
-
 function onPointerMove(event) {
-
-    pointer.set((event.clientX / window.innerWidth) * 2 - 1, - (event.clientY / window.innerHeight) * 2 + 1);
+    //归一化的二维向量，确定鼠标指针在3D世界中的位置
+    pointer.set((event.clientX / threeOcean.value.clientWidth) * 2 - 1, - (event.clientY / threeOcean.value.clientHeight) * 2 + 1);
 
     raycaster.setFromCamera(pointer, camera);
 
@@ -115,8 +88,15 @@ function onPointerMove(event) {
 
         const intersect = intersects[0];
 
-        rollOverMesh.position.copy(intersect.point).add(intersect.face.normal);
+        rollOverMesh.position.copy(intersect.point).add(intersect.face.normal);//沿交点的法线方向稍作偏移
         rollOverMesh.position.divideScalar(50).floor().multiplyScalar(50).addScalar(25);
+        //rollOverMesh.position.divideScalar(n).floor().multiplyScalar(n).addScalar(n / 2);
+        /**
+         * divideScalar(n) 将位置坐标的每个分量除以新的格子大小 n。
+         * .floor() 向下取整，确保结果是整数，这样可以对齐到格子的边缘。
+         * multiplyScalar(n) 再将结果乘以格子大小 n，将坐标放回原来的比例中，但现在它对齐到了格子的边缘。
+         * addScalar(n / 2) 最后，加上 n / 2，这样做是为了将对象的位置从格子的边缘移动到格子的中心。
+         */
 
 
     }
@@ -124,8 +104,8 @@ function onPointerMove(event) {
 }
 
 function onPointerDown(event) {
-
-    pointer.set((event.clientX / window.innerWidth) * 2 - 1, - (event.clientY / window.innerHeight) * 2 + 1);
+    
+    pointer.set((event.clientX / threeOcean.value.clientWidth) * 2 - 1, - (event.clientY / threeOcean.value.clientHeight) * 2 + 1);
 
     raycaster.setFromCamera(pointer, camera);
 
@@ -217,14 +197,18 @@ function toSphere() {
 }
 function toEnclosureZ() {
     basicGeometry = new THREE.BoxGeometry(50, 50, 10);
+    basicGeometry.translate(0, 0, 20);
 }
 function toEnclosureH() {
-    basicGeometry = new THREE.BoxGeometry(10, 50, 50);
+    basicGeometry = new THREE.BoxGeometry(50, 50, 10);
+    basicGeometry.translate(0, 0, 20);
+    basicGeometry.rotateY(Math.PI / 2);
+
 }
 </script>
 
 <style lang="scss" scoped>
-#threeMap {
+.threeOcean {
     width: 100%;
     height: 100%;
     position: absolute;

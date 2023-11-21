@@ -4,10 +4,10 @@ const router = createRouter({
     history: createWebHashHistory(),
     routes: [
         { path: '/', component: () => import('../views/index/index.vue') },
-        { path: '/GridPlane', component: () => import('../views/threejs/GridPlane.vue') },
+        { path: '/GridPlane', component: () => import('../views/threejs/GridPlane/GridPlane.vue') },
         { path: '/basicThree', component: () => import('../views/threejs/basicThree.vue') },
         { path: '/PhysicsThree', component: () => import('../views/threejs/PhysicsThree.vue') },
-        { path: '/PhysicsThreeWithFinding', component: () => import('../views/threejs/PhysicsThreeWithFinding.vue') },
+        { path: '/PhysicsThreeWithFinding', component: () => import('../views/threejs/PhysicsThreeWithFinding/PhysicsThreeWithFinding.vue') },
         { path: '/load', component: () => import('../views/threejs/LoadModel.vue') },
         { path: '/quaternionThree', component: () => import('../views/threejs/quaternionThree.vue') },
         { path: '/initWater', component: () => import('../views/threejs/initWater.vue') },

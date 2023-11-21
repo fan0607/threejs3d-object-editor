@@ -12,6 +12,13 @@
         //    "webRoot": "${workspaceFolder}"
         // },
         {
+           "name": "GridPlane",
+           "request": "launch",
+           "type": "chrome",
+           "url": "http://127.0.0.1:5173/#/GridPlane",
+           "webRoot": "${workspaceFolder}/cesium"
+        },
+        {
             "type": "chrome",
             "request": "launch",
             "name": "项目",
