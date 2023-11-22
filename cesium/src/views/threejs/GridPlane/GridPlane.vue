@@ -14,21 +14,25 @@ import { onMounted, ref } from 'vue'
 import * as THREE from 'three'
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js'
 import onWindowResize from './utils/events'
-import {initScene} from './utils/initScene'
-
+import { initScene } from './utils/initScene'
+import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
+let gui = null;
 const threeOcean = ref(null)
 let basicGeometry,
     cubeMaterial,
     plane,
     objects = [],
     isShiftDown = false,
-    camera, rollOverMaterial, scene, renderer,controls;
-
+    camera, rollOverMaterial, scene, renderer, controls;
+let objType = 'cube';
+let itemAxisHelper = new THREE.AxesHelper(100);
+let selectItem = false;
+let selectObject = null;
 let rollOverMesh = null;//鼠标移动的小方块
 let raycaster = null;//射线
 let pointer = null;//鼠标位置
-onMounted(() => {
-    [scene,renderer,camera,controls] = initScene(threeOcean.value.clientWidth, threeOcean.value.clientHeight, threeOcean);
+onMounted(async() => {
+    [scene, renderer, camera, controls] =await initScene(threeOcean.value.clientWidth, threeOcean.value.clientHeight, threeOcean);
     raycaster = new THREE.Raycaster();
     pointer = new THREE.Vector2();
     initObjects(scene);
@@ -39,42 +43,42 @@ onMounted(() => {
         renderer.render(scene, camera);
     })();
 })
-function createrollOverMesh(){
-    const rollOverGeo = new THREE.BoxGeometry(50, 50, 50);
+function createrollOverMesh() {
+    if (rollOverMesh) {
+        scene.remove(rollOverMesh);
+    }
     rollOverMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, opacity: 0.5, transparent: true });
-    rollOverMesh = new THREE.Mesh(rollOverGeo, rollOverMaterial);
+    rollOverMesh = new THREE.Mesh(basicGeometry, rollOverMaterial);
+    scene.add(rollOverMesh);
     return rollOverMesh;
 }
-function initObjects(scene){
-    // roll-over helpers
-    const rollOverMesh = createrollOverMesh()
-    scene.add(rollOverMesh);
+function initObjects(scene) {
+
 
     // cubes 立方体
     basicGeometry = new THREE.BoxGeometry(50, 50, 50);
     cubeMaterial = new THREE.MeshLambertMaterial({ color: 0xfeb74c });
-
+    // roll-over helpers
+    rollOverMesh = createrollOverMesh(objType)
     // grid
-    const gridHelper = new THREE.GridHelper(10000, 200);
+    const gridHelper = new THREE.GridHelper(5000, 100, 0x00ffff, 0x00ffff);
     scene.add(gridHelper);
 
-    const geometry = new THREE.PlaneGeometry(10000, 10000);
+    const geometry = new THREE.PlaneGeometry(5000, 5000);
     geometry.rotateX(- Math.PI / 2);
 
-    plane = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ visible: false }));
+    plane = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ visible: true, color: 0x000000, opacity: 0.6, transparent: true }));
     scene.add(plane);
 
     objects.push(plane);
 
-    const axisHelper = new THREE.AxesHelper(1000);
-    scene.add(axisHelper);
 }
-function bindEvents(){
+function bindEvents() {
     document.addEventListener('pointermove', onPointerMove);
     document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('keydown', onDocumentKeyDown);
     document.addEventListener('keyup', onDocumentKeyUp);
-    window.addEventListener('resize', ()=>{onWindowResize(camera, renderer, threeOcean.value.clientWidth, threeOcean.value.clientHeight)}, false);
+    window.addEventListener('resize', () => { onWindowResize(camera, renderer, threeOcean.value.clientWidth, threeOcean.value.clientHeight) }, false);
 }
 function onPointerMove(event) {
     //归一化的二维向量，确定鼠标指针在3D世界中的位置
@@ -87,9 +91,10 @@ function onPointerMove(event) {
     if (intersects.length > 0) {
 
         const intersect = intersects[0];
-
-        rollOverMesh.position.copy(intersect.point).add(intersect.face.normal);//沿交点的法线方向稍作偏移
-        rollOverMesh.position.divideScalar(50).floor().multiplyScalar(50).addScalar(25);
+        if (rollOverMesh) {
+            rollOverMesh.position.copy(intersect.point).add(intersect.face.normal);//沿交点的法线方向稍作偏移
+            rollOverMesh.position.divideScalar(50).floor().multiplyScalar(50).addScalar(25);
+        }
         //rollOverMesh.position.divideScalar(n).floor().multiplyScalar(n).addScalar(n / 2);
         /**
          * divideScalar(n) 将位置坐标的每个分量除以新的格子大小 n。
@@ -97,6 +102,14 @@ function onPointerMove(event) {
          * multiplyScalar(n) 再将结果乘以格子大小 n，将坐标放回原来的比例中，但现在它对齐到了格子的边缘。
          * addScalar(n / 2) 最后，加上 n / 2，这样做是为了将对象的位置从格子的边缘移动到格子的中心。
          */
+        /* if(autoDrawer){
+            const voxel = new THREE.Mesh(basicGeometry, cubeMaterial);
+            voxel.position.copy(intersect.point).add(intersect.face.normal);
+            voxel.position.divideScalar(50).floor().multiplyScalar(50).addScalar(25);
+            scene.add(voxel);
+            objects.push(voxel);
+        } */
+
 
 
     }
@@ -104,7 +117,7 @@ function onPointerMove(event) {
 }
 
 function onPointerDown(event) {
-    
+
     pointer.set((event.clientX / threeOcean.value.clientWidth) * 2 - 1, - (event.clientY / threeOcean.value.clientHeight) * 2 + 1);
 
     raycaster.setFromCamera(pointer, camera);
@@ -129,6 +142,59 @@ function onPointerDown(event) {
 
             // create cube
 
+        } else if (intersect && selectItem) {
+            if (intersect.object !== plane) {
+                /* //记录相机位置
+                let cameraPosition = camera.position.clone();
+                console.log('cameraPosition: ', cameraPosition); */
+                itemAxisHelper.removeFromParent()
+                selectObject = intersect.object;
+                selectObject.add(itemAxisHelper);
+                if (gui) {
+                    gui.destroy();
+                }
+                gui = new GUI();
+                let geo = {
+                    width: 50,
+                    height: 50,
+                    depth: 50,
+                    rotateX: 0,
+                    rotateY: 0,
+                    rotateZ: 0,
+                }
+                gui.add(geo, 'width', 0, 100, 2).onChange(function (value) {
+                    selectObject.scale.x = value;
+
+                });
+                gui.add(geo, 'height', 0, 100, 2).onChange(function (value) {
+
+                    selectObject.scale.y = value;
+
+                });
+                gui.add(geo, 'depth', 0, 100, 2).onChange(function (value) {
+
+                    selectObject.scale.z = value;
+
+                });
+                gui.add(geo, 'rotateX', 0, 360, 1).onChange(function (value) {
+
+                    selectObject.rotation.x = value * Math.PI / 180;
+
+                });
+                gui.add(geo, 'rotateY', 0, 360, 1).onChange(function (value) {
+
+                    selectObject.rotation.y = value * Math.PI / 180;
+
+                });
+                gui.add(geo, 'rotateZ', 0, 360, 1).onChange(function (value) {
+
+                    selectObject.rotation.z = value * Math.PI / 180;
+
+                });
+
+            }
+
+
         } else {
 
             // const voxel = new THREE.Mesh( basicGeometry, cubeMaterial );
@@ -141,8 +207,8 @@ function onPointerDown(event) {
             voxel.position.divideScalar(50).floor().multiplyScalar(50).addScalar(25);
 
             scene.add(voxel);
-
             objects.push(voxel);
+
 
         }
 
@@ -155,6 +221,10 @@ function onDocumentKeyDown(event) {
     switch (event.keyCode) {
 
         case 16: isShiftDown = true; break;
+        case 17: {
+            selectItem = true;
+            break;
+        }
 
     }
 
@@ -165,8 +235,12 @@ function onDocumentKeyUp(event) {
     switch (event.keyCode) {
 
         case 16: isShiftDown = false; break;
-
+        case 17: {
+            selectItem = false;
+            break;
+        }
     }
+
 
 }
 function sceneSave() {
@@ -191,20 +265,33 @@ function save(blob, filename) {
 }
 function toCube() {
     basicGeometry = new THREE.BoxGeometry(50, 50, 50);
+    objType = 'cube';
+    createrollOverMesh(objType)
+
 }
 function toSphere() {
     basicGeometry = new THREE.SphereGeometry(25);
+    objType = 'sphere';
+    createrollOverMesh(objType)
+
 }
 function toEnclosureZ() {
     basicGeometry = new THREE.BoxGeometry(50, 50, 10);
     basicGeometry.translate(0, 0, 20);
+    objType = 'enclosureZ';
+    createrollOverMesh(objType)
+
 }
 function toEnclosureH() {
     basicGeometry = new THREE.BoxGeometry(50, 50, 10);
     basicGeometry.translate(0, 0, 20);
     basicGeometry.rotateY(Math.PI / 2);
+    objType = 'enclosureH';
+    createrollOverMesh(objType)
+
 
 }
+
 </script>
 
 <style lang="scss" scoped>
@@ -222,8 +309,9 @@ function toEnclosureH() {
 
 .save {
     position: absolute;
-    top: 10px;
-    right: 10px;
+    top: 0px;
+    left: 90px;
     z-index: 1;
+    background-color: #fff;
 }
 </style>
