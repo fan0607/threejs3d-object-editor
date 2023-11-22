@@ -3,6 +3,12 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { initFontLoader } from './initFontLoader'
 import vertexShader from '../glsl/stars/vertexShader.glsl?raw'
 import fragmentShader from '../glsl/stars/fragmentShader.glsl?raw'
+import px from '../../../../assets/stars/px.png'
+import nx from '../../../../assets/stars/nx.png'
+import py from '../../../../assets/stars/py.png'
+import ny from '../../../../assets/stars/ny.png'
+import pz from '../../../../assets/stars/pz.png'
+import nz from '../../../../assets/stars/nz.png'
 export async function initScene(threeOceanWidth, threeOceanHeight, threeOcean) {
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0xcccccc, 1000, 10000);
@@ -14,9 +20,10 @@ export async function initScene(threeOceanWidth, threeOceanHeight, threeOcean) {
   threeOcean.value.appendChild(renderer.domElement);
   const camera = initCamera(threeOceanWidth, threeOceanHeight, scene);
   const controls = initControls(camera, renderer);
-  const font = await initFontLoader('按住 ctrl 选中物体',new THREE.Vector3(-700, 0, 0));
-  const font2 = await initFontLoader('按住 shift 删除物体',new THREE.Vector3(-900, 0, 1000));
-  scene.add(font,font2);
+  const font = await initFontLoader('按住 Ctrl 选中物体',new THREE.Vector3(-900, 0, 0));
+  const font2 = await initFontLoader('按住 Shift 删除物体',new THREE.Vector3(-900, 0, 1000));
+  const font3 = await initFontLoader('按住 Esc 取消选中物体',new THREE.Vector3(-900, 0, -1000));
+  scene.add(font,font2,font3);
   // 创建WebGLRenderTarget
   const renderTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight);
 
@@ -54,7 +61,13 @@ export async function initScene(threeOceanWidth, threeOceanHeight, threeOcean) {
       renderer.render(scene, camera);
   }
   animate();
-  scene.background = renderTarget.texture;
+  // scene.background = renderTarget.texture;
+  scene.background = 
+            new THREE.CubeTextureLoader().load([
+                px, nx,
+                py, ny,
+                pz, nz
+            ]);
   return [scene, renderer, camera, controls];
 }
 function initCamera(threeOceanWidth, threeOceanHeight, scene){

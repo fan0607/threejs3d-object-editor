@@ -6,6 +6,8 @@
         <el-button @click="toSphere()">球形</el-button>
         <el-button @click="toEnclosureZ()">围墙Z</el-button>
         <el-button @click="toEnclosureH()">围墙H</el-button>
+        <el-button @click="toModel()">模型</el-button>
+
     </div>
 </template>
 
@@ -16,6 +18,8 @@ import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js'
 import onWindowResize from './utils/events'
 import { initScene } from './utils/initScene'
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
+import model from '../../../assets/grids/68-futuristic_trike_high-poly_2-fbx-7.4-binary-mit-animation/Futuristic_Trike_High-Poly_2-(FBX 7.4 binary mit Animation).fbx?url'
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 let gui = null;
 const threeOcean = ref(null)
 let basicGeometry,
@@ -46,6 +50,9 @@ onMounted(async() => {
 function createrollOverMesh() {
     if (rollOverMesh) {
         scene.remove(rollOverMesh);
+    }
+    if(!basicGeometry){
+        return;
     }
     rollOverMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, opacity: 0.5, transparent: true });
     rollOverMesh = new THREE.Mesh(basicGeometry, rollOverMaterial);
@@ -117,7 +124,6 @@ function onPointerMove(event) {
 }
 
 function onPointerDown(event) {
-
     pointer.set((event.clientX / threeOcean.value.clientWidth) * 2 - 1, - (event.clientY / threeOcean.value.clientHeight) * 2 + 1);
 
     raycaster.setFromCamera(pointer, camera);
@@ -196,18 +202,29 @@ function onPointerDown(event) {
 
 
         } else {
+            if(basicGeometry){
+                // const voxel = new THREE.Mesh( basicGeometry, cubeMaterial );
+                if(objType==='model'){
+                    const voxel = new THREE.Mesh(basicGeometry, cubeMaterial);
+                    voxel.position.copy(intersect.point).add(intersect.face.normal);
+                    voxel.position.divideScalar(50).floor().multiplyScalar(50).addScalar(25);
+                    voxel.rotation.copy(rollOverMesh.rotation);
+                    scene.add(voxel);
+                    objects.push(voxel);
+                    return;
+                }else{
+                    const voxel = new THREE.Mesh(basicGeometry, new THREE.MeshLambertMaterial({ color: 0xfeb74c }));
+                    voxel.position.copy(intersect.point).add(intersect.face.normal);
+                    //voxel.position.divideScalar( 50 )归一化   
+                    //voxel.position.divideScalar( 50 ).floor()对齐
+                    //voxel.position.divideScalar( 50 ).floor().multiplyScalar( 50 )缩放回原来的规模
+                    //voxel.position.divideScalar( 50 ).floor().multiplyScalar( 50 ).addScalar( 25 )加上偏移量，对齐到网格中心，因为网格中心是25
+                    voxel.position.divideScalar(50).floor().multiplyScalar(50).addScalar(25);
 
-            // const voxel = new THREE.Mesh( basicGeometry, cubeMaterial );
-            const voxel = new THREE.Mesh(basicGeometry, cubeMaterial);
-            voxel.position.copy(intersect.point).add(intersect.face.normal);
-            //voxel.position.divideScalar( 50 )归一化   
-            //voxel.position.divideScalar( 50 ).floor()对齐
-            //voxel.position.divideScalar( 50 ).floor().multiplyScalar( 50 )缩放回原来的规模
-            //voxel.position.divideScalar( 50 ).floor().multiplyScalar( 50 ).addScalar( 25 )加上偏移量，对齐到网格中心，因为网格中心是25
-            voxel.position.divideScalar(50).floor().multiplyScalar(50).addScalar(25);
-
-            scene.add(voxel);
-            objects.push(voxel);
+                    scene.add(voxel);
+                    objects.push(voxel);
+                }
+            }
 
 
         }
@@ -223,6 +240,19 @@ function onDocumentKeyDown(event) {
         case 16: isShiftDown = true; break;
         case 17: {
             selectItem = true;
+            break;
+        }
+        //esc
+        case 27: {
+            if (selectObject) {
+                selectObject.remove(itemAxisHelper);
+                selectObject = null;
+            }
+            if(basicGeometry){
+                basicGeometry = null;
+                objType = null;
+                createrollOverMesh(objType)
+            }
             break;
         }
 
@@ -290,6 +320,28 @@ function toEnclosureH() {
     createrollOverMesh(objType)
 
 
+}
+function toModel() {
+    const loader = new FBXLoader();
+    loader.load(model, function (object) {
+        // object.scale.set(0.01, 0.01, 0.01);
+        object.position.set(0, 0, 0);
+        object.rotation.set(0, 0, 0);
+        object.traverse(function (child) {
+            if (child.isMesh) {
+                if (child.geometry) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                    basicGeometry = child.geometry;
+                    basicGeometry.rotateX(- Math.PI / 2)
+                    basicGeometry.scale(100, 100, 100);
+                    objType = 'model';
+                    cubeMaterial = child.material;
+                    createrollOverMesh(objType)
+                }
+            }
+        });
+    });
 }
 
 </script>
