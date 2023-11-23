@@ -42,6 +42,7 @@
             <el-menu-item index="/PhysicsThree">PhysicsThree</el-menu-item>
             <el-menu-item index="/PhysicsThreeWithFinding">PhysicsThreeWithFinding</el-menu-item>
             <el-menu-item index="/GridPlane">GridPlane</el-menu-item>
+            <el-menu-item index="/ObjectEditor">ObjectEditor</el-menu-item>
             <el-menu-item index="/load">LoadModel</el-menu-item>
             <el-menu-item index="/quaternionThree">quaternionThree</el-menu-item>
             <el-menu-item index="/initWater">initWater</el-menu-item>

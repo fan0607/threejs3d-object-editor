@@ -19,6 +19,13 @@
            "webRoot": "${workspaceFolder}/cesium"
         },
         {
+            "name": "ObjectEditor",
+            "request": "launch",
+            "type": "chrome",
+            "url": "http://127.0.0.1:5173/#/ObjectEditor",
+            "webRoot": "${workspaceFolder}/editor"
+         },
+        {
             "type": "chrome",
             "request": "launch",
             "name": "项目",

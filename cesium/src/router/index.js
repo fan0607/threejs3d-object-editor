@@ -5,6 +5,7 @@ const router = createRouter({
     routes: [
         { path: '/', component: () => import('../views/index/index.vue') },
         { path: '/GridPlane', component: () => import('../views/threejs/GridPlane/GridPlane.vue') },
+        { path: '/ObjectEditor', component: () => import('../views/threejs/ObjectEditor/ObjectEditor.vue') },
         { path: '/basicThree', component: () => import('../views/threejs/basicThree.vue') },
         { path: '/PhysicsThree', component: () => import('../views/threejs/PhysicsThree.vue') },
         { path: '/PhysicsThreeWithFinding', component: () => import('../views/threejs/PhysicsThreeWithFinding/PhysicsThreeWithFinding.vue') },
