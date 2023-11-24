@@ -4,6 +4,10 @@ import { initFontLoader } from './initFontLoader'
 import vertexShader from '../glsl/stars/vertexShader.glsl?raw'
 import fragmentShader from '../glsl/stars/fragmentShader.glsl?raw'
 import { type Ref } from 'vue';
+import { DirectionalLightHelper } from 'three/src/helpers/DirectionalLightHelper.js';
+import { createFlowWallMat,creatWallByPath } from '../glsl/flowLights/index';
+import bgTexture from "@/assets/grids/bg.png?url";
+import flowTexture from "@/assets/grids/flow.png?url";
 export async function initScene(threeOceanWidth:number, threeOceanHeight:number, threeOcean:Ref<HTMLElement>):Promise<[THREE.Scene, THREE.WebGLRenderer, THREE.PerspectiveCamera, OrbitControls]> {
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0xcccccc, 1000, 5000);
@@ -19,6 +23,23 @@ export async function initScene(threeOceanWidth:number, threeOceanHeight:number,
   const font3 = await initFontLoader('按住 Esc 取消选中物体',new THREE.Vector3(-10, 0, -50));
   if(font&&font2&&font3)
   scene.add(font,font2,font3);
+
+	const path = [
+    [500, 0 ,500],
+    [500, 0 ,-500],
+    [-500, 0 ,-500],
+    [-500, 0 ,500],
+    [500, 0 ,500],
+  ];
+  const wallMat = createFlowWallMat({bgUrl:bgTexture,flowUrl:flowTexture});
+  const wallMesh = creatWallByPath({
+    material: wallMat,
+    path,
+    height: 100,
+  });
+
+  scene.add(wallMesh);
+
   // 创建WebGLRenderTarget
   const renderTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight);
 
@@ -42,6 +63,7 @@ export async function initScene(threeOceanWidth:number, threeOceanHeight:number,
   // 在动画循环中更新和渲染星空
   function animate() {
       requestAnimationFrame(animate);
+      wallMat.uniforms.time.value += 0.01;
       const delta = clock.getDelta();
 
       // 更新星空材质的时间
@@ -56,7 +78,8 @@ export async function initScene(threeOceanWidth:number, threeOceanHeight:number,
       renderer.render(scene, camera);
   }
   animate();
-  scene.background = renderTarget.texture;
+//   scene.background = renderTarget.texture;
+  // scene.background = new THREE.Color(0xcccccc);
 //   scene.background = 
 //             new THREE.CubeTextureLoader().load([
 //                 px, nx,
@@ -75,13 +98,14 @@ function initCamera(threeOceanWidth:number, threeOceanHeight:number, scene:THREE
     return camera;
 }
 function initLight(scene:THREE.Scene){
-  const ambientLight = new THREE.AmbientLight(0x606060, 3);
+//   const ambientLight = new THREE.AmbientLight(0x606060, 3);
+  const ambientLight = new THREE.AmbientLight(0xffffff, 3);
   scene.add(ambientLight);
 
   const directionalLight = new THREE.DirectionalLight(0xffffff, 3);
   directionalLight.position.set(1, 0.75, 0.5).normalize();
   scene.add(directionalLight);
-
+//   const directionalLightHelper = new DirectionalLightHelper(directionalLight, 5);
   const axisHelper = new THREE.AxesHelper(1000);
   scene.add(axisHelper);
 }
