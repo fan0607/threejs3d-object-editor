@@ -12,9 +12,9 @@
             <input type="file" name="导入模型" ref="importModel" id="导入模型" @click="toModelImport()">
         </button>
         <button @click="sceneSave()">保存</button>
-        <button @click="changeType('translate', controlsType)">移动</button>
-        <button @click="changeType('rotate', controlsType)">旋转</button>
-        <button @click="changeType('scale', controlsType)">缩放</button>
+        <button @click="toChangeType('translate')">移动</button>
+        <button @click="toChangeType('rotate')">旋转</button>
+        <button @click="toChangeType('scale')">缩放</button>
 
 
     </div>
@@ -31,9 +31,10 @@ import model from '@/assets/grids/68-futuristic_trike_high-poly_2-fbx-7.4-binary
 import grass from '@/assets/grids/grass.glb?url'
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { setTransformControls, removeTransformControls, changeType, initTransform } from './utils/transform'
+import { setTransformControls, removeTransformControls, initTransform } from './utils/transform'
 import { useModelStore } from '@/stores/useModelStore'
 import { drawTubes, initDraw } from './utils/drawTubes'
+import { initPostProcessing } from './utils/postProcessing'
 
 let gui: GUI | null = null;
 const threeOcean = ref()
@@ -43,7 +44,7 @@ let basicGeometry: THREE.BoxGeometry | THREE.TubeGeometry | THREE.SphereGeometry
     plane: THREE.Mesh | null = null,
     objects: THREE.Mesh[] = [],
     isShiftDown = false,
-    camera: THREE.PerspectiveCamera, rollOverMaterial: THREE.Material, scene: THREE.Scene, renderer: THREE.Renderer, controls: any;
+    camera: THREE.PerspectiveCamera, rollOverMaterial: THREE.Material, scene: THREE.Scene, renderer: THREE.WebGLRenderer, controls: any;
 let objType = 'cube';
 let isMove = false;
 const store = useModelStore();//store.models
@@ -54,16 +55,21 @@ let rollOverMesh: THREE.Mesh | null = null;//鼠标移动的小方块
 let raycaster: THREE.Raycaster = new THREE.Raycaster();
 let pointer = new THREE.Vector2();
 let controlsType = ref('translate');
+let composer: any = null;
+let outlinePass: any = null;
+
 onMounted(async () => {
     [scene, renderer, camera, controls] = await initScene(threeOcean.value.clientWidth, threeOcean.value.clientHeight, threeOcean);
     initDraw(scene, renderer, camera, controls, objects)
-    initTransform(scene, renderer, camera, controls)
+    initTransform(scene, renderer, camera, controls);
+    [composer, outlinePass] = initPostProcessing(scene, renderer , camera, threeOcean.value.clientWidth, threeOcean.value.clientHeight)
     initObjects();
     bindEvents();
     (function animate() {
         requestAnimationFrame(animate);
+        composer.render();
         controls.update();
-        renderer.render(scene, camera);
+        // renderer.render(scene, camera);
     })();
 })
 function createrollOverMesh() {
@@ -176,6 +182,7 @@ function onPointerDown(event: PointerEvent) {
                     selectObject = null;
                 }
                 selectObject = intersect.object as THREE.Mesh;
+                outlinePass.selectedObjects = [selectObject];
                 setTransformControls(selectObject, controlsType.value, store.models);
                 if (gui) {
                     gui.destroy();
@@ -274,6 +281,7 @@ function onDocumentKeyDown(event: KeyboardEvent) {
         //esc
         case 27: {
             if (selectObject) {
+                outlinePass.selectedObjects = [];
                 removeTransformControls();
                 selectObject = null;
             }
@@ -479,7 +487,11 @@ function initDrawTubes() {
     store.models = [];
     objType = 'tube';
 }
-
+const toChangeType = (type: string) => {
+    controlsType.value = type;
+    if(selectObject)
+    setTransformControls(selectObject, controlsType.value, store.models);
+}
 // export { scene, renderer, camera, controls, objects, models };
 </script>
 
@@ -491,9 +503,9 @@ function initDrawTubes() {
     top: 0;
     left: 0;
     z-index: 0;
-    background-image: -moz-linear-gradient(0deg, rgb(255, 216, 189), rgb(255, 185, 179));
-    background-image: -webkit-linear-gradient(0deg, rgb(255, 216, 189), rgb(255, 185, 179));
-    background-image: linear-gradient(0deg, rgb(255, 216, 189), rgb(255, 185, 179));
+    // background-image: -moz-linear-gradient(0deg, rgb(255, 216, 189), rgb(255, 185, 179));
+    // background-image: -webkit-linear-gradient(0deg, rgb(255, 216, 189), rgb(255, 185, 179));
+    // background-image: linear-gradient(0deg, rgb(255, 216, 189), rgb(255, 185, 179));
 }
 
 .save {

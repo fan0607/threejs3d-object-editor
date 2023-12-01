@@ -67,10 +67,10 @@ export function drawTubes(
       size: 0.1,
     });
     const particleSystem = new THREE.Points(particles, particleMaterial);
+    particleSystem.userData.referParticleSystem = names;
     scene.add(particleSystem);
     function animate() {
       requestAnimationFrame(animate);
-
       const positions = particleSystem.geometry.attributes.position.array;
       for (let i = 0; i < positions.length; i += 3) {
         // 为每个粒子计算在曲线上的一个新位置

@@ -35,6 +35,11 @@ export function setTransformControls(
         const tubes = scene.children.filter((item: any) =>
           item.userData?.referTube?.find((item: string) => item === name)
         );
+        scene.children.filter((item: any) =>
+          item.userData?.referParticleSystem?.find((item: string) => item === name)
+        ).forEach((item: any) => {
+          scene.remove(item);
+        });
         tubes.forEach((item: any) => {
           scene.remove(item);
           //重新绘制管道
@@ -79,7 +84,4 @@ export function removeTransformControls() {
       item.dispose();
     });
   }
-}
-export function changeType(type: string, controlsType: any) {
-  controlsType.value = type;
 }
