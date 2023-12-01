@@ -3,7 +3,7 @@
     <div class="save w-36 border-e-gray-600">
         工具栏
         <button @click="initDrawTubes()">管道</button>
-        <button @click="toCube()">矩形</button>
+        <button @click="toCube()">立方</button>
         <button @click="toSphere()">球形</button>
         <button @click="toEnclosureZ()">围墙Z</button>
         <button @click="toEnclosureH()">围墙H</button>
@@ -12,13 +12,16 @@
             <input type="file" name="导入模型" ref="importModel" id="导入模型" @click="toModelImport()">
         </button>
         <button @click="sceneSave()">保存</button>
+        <button @click="changeType('translate', controlsType)">移动</button>
+        <button @click="changeType('rotate', controlsType)">旋转</button>
+        <button @click="changeType('scale', controlsType)">缩放</button>
 
 
     </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, type Ref } from 'vue'
+import { onMounted, ref, type Ref } from 'vue';
 import * as THREE from 'three'
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js'
 import onWindowResize from './utils/events'
@@ -28,6 +31,10 @@ import model from '@/assets/grids/68-futuristic_trike_high-poly_2-fbx-7.4-binary
 import grass from '@/assets/grids/grass.glb?url'
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { setTransformControls, removeTransformControls, changeType, initTransform } from './utils/transform'
+import { useModelStore } from '@/stores/useModelStore'
+import { drawTubes, initDraw } from './utils/drawTubes'
+
 let gui: GUI | null = null;
 const threeOcean = ref()
 const importModel = ref()
@@ -39,15 +46,18 @@ let basicGeometry: THREE.BoxGeometry | THREE.TubeGeometry | THREE.SphereGeometry
     camera: THREE.PerspectiveCamera, rollOverMaterial: THREE.Material, scene: THREE.Scene, renderer: THREE.Renderer, controls: any;
 let objType = 'cube';
 let isMove = false;
-let models: THREE.Object3D[] = [];
-let itemAxisHelper = new THREE.AxesHelper(100);
+const store = useModelStore();//store.models
+
 let selectItem = false;
 let selectObject: THREE.Mesh | null = null;
 let rollOverMesh: THREE.Mesh | null = null;//鼠标移动的小方块
 let raycaster: THREE.Raycaster = new THREE.Raycaster();
 let pointer = new THREE.Vector2();
+let controlsType = ref('translate');
 onMounted(async () => {
     [scene, renderer, camera, controls] = await initScene(threeOcean.value.clientWidth, threeOcean.value.clientHeight, threeOcean);
+    initDraw(scene, renderer, camera, controls, objects)
+    initTransform(scene, renderer, camera, controls)
     initObjects();
     bindEvents();
     (function animate() {
@@ -163,72 +173,14 @@ function onPointerDown(event: PointerEvent) {
                 let cameraPosition = camera.position.clone();
                 console.log('cameraPosition: ', cameraPosition); */
                 if (selectObject) {
-                    selectObject.remove(itemAxisHelper);
                     selectObject = null;
                 }
-                itemAxisHelper.removeFromParent()
                 selectObject = intersect.object as THREE.Mesh;
-                selectObject.add(itemAxisHelper);
+                setTransformControls(selectObject, controlsType.value, store.models);
                 if (gui) {
                     gui.destroy();
                 }
                 gui = new GUI();
-                let geo = {
-                    width: 50,
-                    height: 50,
-                    depth: 50,
-                    rotateX: 0,
-                    rotateY: 0,
-                    rotateZ: 0,
-                    translateX: 0,
-                    translateY: 0,
-                    translateZ: 0,
-                }
-                gui.add(geo, 'width', 0, 100, 2).onChange(function (value) {
-                    selectObject!.scale.x = value;
-
-                });
-                gui.add(geo, 'height', 0, 100, 2).onChange(function (value) {
-
-                    selectObject!.scale.y = value;
-
-                });
-                gui.add(geo, 'depth', 0, 100, 2).onChange(function (value) {
-
-                    selectObject!.scale.z = value;
-
-                });
-                gui.add(geo, 'rotateX', 0, 360, 1).onChange(function (value) {
-
-                    selectObject!.rotation.x = value * Math.PI / 180;
-
-                });
-                gui.add(geo, 'rotateY', 0, 360, 1).onChange(function (value) {
-
-                    selectObject!.rotation.y = value * Math.PI / 180;
-
-                });
-                gui.add(geo, 'rotateZ', 0, 360, 1).onChange(function (value) {
-
-                    selectObject!.rotation.z = value * Math.PI / 180;
-                    console.log('selectObject: ', selectObject);
-
-                });
-                gui.add(geo, 'translateX', -100, 100, 1).onChange(function (value) {
-
-                    selectObject!.position.x = value;
-
-                });
-                gui.add(geo, 'translateY', -100, 100, 1).onChange(function (value) {
-
-                    selectObject!.position.y = value;
-
-                });
-                gui.add(geo, 'translateZ', -100, 100, 1).onChange(function (value) {
-
-                    selectObject!.position.z = value;
-
-                });
                 gui.add(selectObject.userData, 'data');
 
             }
@@ -251,16 +203,19 @@ function onPointerDown(event: PointerEvent) {
                             if (model)
                                 modelArray.push(model);
                         });
-                        drawTubes(scene, models, 5, 0x00ff00)
+                        drawTubes(scene, store.models, 5, 0x00ff00)
                     });
                 }
             }
         }
         else if (objType === 'tube') {
             if (intersect.object !== plane) {
-                models.push(intersect.object);
-                if (models.length === 2) {
-                    drawTubes(scene, models, 5, 0x00ff00)
+                store.models.push(intersect.object);
+
+
+
+                if (store.models.length === 2) {
+                    drawTubes(scene, store.models, 5, 0x00ff00)
                 }
             }
         }
@@ -319,7 +274,7 @@ function onDocumentKeyDown(event: KeyboardEvent) {
         //esc
         case 27: {
             if (selectObject) {
-                selectObject.remove(itemAxisHelper);
+                removeTransformControls();
                 selectObject = null;
             }
             if (basicGeometry) {
@@ -445,8 +400,8 @@ function toModel() {
         });
     });
 }
-function toImportModel(){
-    if(importModel.value){
+function toImportModel() {
+    if (importModel.value) {
         importModel.value.click();
     }
 }
@@ -521,87 +476,11 @@ function toModelImport() {
     } */
 }
 function initDrawTubes() {
-    models = [];
+    store.models = [];
     objType = 'tube';
 }
-function drawTubes(scene: THREE.Scene, models: any, radius = 5, color: number) {
-    const name = `tube${objects.length + 1}`;
-    const points: Ref<Array<THREE.Vector3>> = ref([])
-    const userDatas: any = []
-    const names: Array<string> = []
-    models.forEach((item: THREE.Mesh) => {
-        const pos = ref(item.position)
-        const userData = ref(item.userData)
-        points.value.push(pos.value);
-        userDatas.push(userData.value)
-        names.push(userData.value.name)
-    });
-    const curve = new THREE.CatmullRomCurve3(points.value);
-    const geometry = new THREE.TubeGeometry(curve, 20, radius, 8, false);
-    const material = new THREE.MeshBasicMaterial({
-        color: 0x00ff00, transparent: true, opacity: 0.5,
-        // wireframe: true,
-        blending: THREE.AdditiveBlending,
-    });
-    //流动线
-    const curveObject = new THREE.Mesh(geometry, material);
-    curveObject.userData = userDatas;
-    curveObject.userData.referTube = names;
-    curveObject.userData.name = name;
-    scene.add(curveObject);
-    // objects.push(curveObject);
-    particles();
-    function particles() {
-        const particleCount = 1000;
-        const particles = new THREE.BufferGeometry();
-        const positions = [];
-        for (let i = 0; i < particleCount; i++) {
-            const position = curve.getPoint(i / particleCount);
-            positions.push(position.x, position.y, position.z);
-        }
 
-        particles.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-        const particleMaterial = new THREE.PointsMaterial({
-            color: 0xFFFFFF,
-            size: 0.1
-        });
-        const particleSystem = new THREE.Points(particles, particleMaterial);
-        scene.add(particleSystem);
-        function animate() {
-            requestAnimationFrame(animate);
-
-            const positions = particleSystem.geometry.attributes.position.array;
-            for (let i = 0; i < positions.length; i += 3) {
-                // 为每个粒子计算在曲线上的一个新位置
-                let t = (Date.now() % 1000) / 1000 * (i / positions.length); // 这个比例因子决定了粒子沿曲线的速度和分布
-
-                if (curveObject.userData[0].data < curveObject.userData[1].data) {
-
-                    t = 1 - ((Date.now() % 1000) / 1000 * (i / positions.length));
-
-                }
-                const position = curve.getPoint(t);
-
-                // positions[i] = position.x;
-                // positions[i + 1] = position.y;
-                // positions[i + 2] = position.z;
-                //在管道扩散
-                positions[i] = position.x + (Math.random() - 0.5) * radius / 2;//乘以半径的一半
-                positions[i + 1] = position.y + (Math.random() - 0.5) * radius / 2;
-                positions[i + 2] = position.z + (Math.random() - 0.5) * radius / 2;
-
-            }
-
-            particleSystem.geometry.attributes.position.needsUpdate = true;
-
-            renderer.render(scene, camera);
-        }
-
-        animate();
-
-
-    }
-}
+// export { scene, renderer, camera, controls, objects, models };
 </script>
 
 <style lang="scss" scoped>
@@ -635,7 +514,8 @@ function drawTubes(scene: THREE.Scene, models: any, radius = 5, color: number) {
         padding: 3px;
         cursor: pointer;
     }
-    input{
+
+    input {
         display: none;
     }
 

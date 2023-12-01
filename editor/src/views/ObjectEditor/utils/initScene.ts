@@ -4,14 +4,17 @@ import { initFontLoader } from './initFontLoader'
 import vertexShader from '../glsl/stars/vertexShader.glsl?raw'
 import fragmentShader from '../glsl/stars/fragmentShader.glsl?raw'
 import { type Ref } from 'vue';
-import { DirectionalLightHelper } from 'three/src/helpers/DirectionalLightHelper.js';
 import { createFlowWallMat,creatWallByPath } from '../glsl/flowLights/index';
 import bgTexture from "@/assets/grids/bg.png?url";
 import flowTexture from "@/assets/grids/flow.png?url";
 export async function initScene(threeOceanWidth:number, threeOceanHeight:number, threeOcean:Ref<HTMLElement>):Promise<[THREE.Scene, THREE.WebGLRenderer, THREE.PerspectiveCamera, OrbitControls]> {
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0xcccccc, 1000, 5000);
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  const renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    alpha: false,
+    logarithmicDepthBuffer: true
+  });
   renderer.setSize(threeOceanWidth, threeOceanHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap; // 默认的是，没有设置的这个清晰 THREE.PCFShadowMap
@@ -99,10 +102,10 @@ function initCamera(threeOceanWidth:number, threeOceanHeight:number, scene:THREE
 }
 function initLight(scene:THREE.Scene){
 //   const ambientLight = new THREE.AmbientLight(0x606060, 3);
-  const ambientLight = new THREE.AmbientLight(0xffffff, 3);
+  const ambientLight = new THREE.AmbientLight(0xffffff, 1);
   scene.add(ambientLight);
 
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 3);
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
   directionalLight.position.set(1, 0.75, 0.5).normalize();
   scene.add(directionalLight);
 //   const directionalLightHelper = new DirectionalLightHelper(directionalLight, 5);

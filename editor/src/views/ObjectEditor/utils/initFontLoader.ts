@@ -10,7 +10,7 @@ export async function initFontLoader(text:string,pos:THREE.Vector3) {
                 font: font,
                 size: 16,
                 height: .5,
-                curveSegments: 1.2,//曲线段数
+                curveSegments: 5,//曲线段数
                 bevelEnabled: true,
                 bevelThickness: 1.0,//斜角厚度
                 bevelSize: .5,//斜角大小
